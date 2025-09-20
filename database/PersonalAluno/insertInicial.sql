@@ -1,0 +1,6 @@
+-- Exemplo de vinculação entre personal e aluno
+-- INSERT INTO personal_aluno (personal_id, aluno_id)
+-- SELECT p.id, a.id 
+-- FROM users p, users a 
+-- WHERE p.tipo = 'personal' AND a.tipo = 'aluno' 
+-- LIMIT 1;

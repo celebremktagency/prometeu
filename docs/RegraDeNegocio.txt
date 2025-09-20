@@ -1,0 +1,46 @@
+REGRAS DE NEGÓCIO - PROMETEUS APP
+
+1. AUTENTICAÇÃO E USUÁRIOS
+- O usuário deve se cadastrar com nome, email e senha
+- Login é feito com email e senha
+- Perfil do usuário é criado automaticamente na tabela 'usuarios' após signup
+- Logout limpa a sessão local
+
+2. TREINOS
+- Treinos podem ter status: 'planned', 'done', 'skipped'  
+- Ao clicar em "Iniciar" treino: marcar status como 'done' e atualizar timestamp
+- Lista de treinos mostra apenas treinos do usuário logado
+- Cada treino tem: exercício, séries, repetições
+- Exercícios exemplo: Agachamento, Flexão, Abdominais, etc.
+
+3. REGISTRO DE DOR
+- Slider de dor vai de 0 a 10 (escala de dor)
+- Usuário seleciona músculos específicos da lista
+- Músculos exemplo: Bíceps, Tríceps, Quadríceps, Panturrilha, etc.
+- Ao mover slider: salvar registro em 'dores' com nivel e músculo selecionado
+- Registros de dor são por usuário e têm timestamp automático
+
+4. INSIGHTS E GRÁFICOS
+- Gráfico de progresso semanal: mostra evolução dos últimos 7 dias
+- Gráfico de nível de dor: média diária dos últimos 7 dias
+- Cálculo de insights é atualizado automaticamente quando há novos registros
+- Dataset dos gráficos: {labels: ['Seg', 'Ter', 'Qua'...], values: [1.2, 2.3, 1.8...]}
+
+5. NAVEGAÇÃO
+- Bottom tabs: Home, Progress, Training
+- Home: cartão de treino + botão iniciar
+- Progress: gráficos de insights 
+- Training: lista completa de treinos
+- Auth: tela inicial quando não logado
+
+6. VALIDAÇÕES
+- Todos os registros devem validar usuario_id da sessão
+- Campos obrigatórios: nome, email (únicos)
+- Nível de dor aceita 1 casa decimal (ex: 3.5)
+
+7. COMPORTAMENTOS ESPECÍFICOS
+- Slider de dor: animação suave, bubble com valor atual
+- Botões: feedback visual (scale 0.98) ao pressionar
+- Cards: sombra sutil, bordas arredondadas conforme tokens
+- Inputs: estado de erro com borda vermelha
+- Loading states em todas as operações async

@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS comunidade_posts;

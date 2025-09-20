@@ -1,0 +1,119 @@
+NOME DO APP: Prometeus
+
+OBJETIVO:
+Aplicativo de treinos patológicos, com foco em acompanhamento de dores e evolução do aluno. Monetização via assinatura (R$12,90/mensal ou R$120/anual). 
+Tecnologia: React Native + Supabase.
+
+TIPOS DE USUÁRIO:
+1. PERSONAL
+   - Cria conta (e-mail/senha).
+   - Cadastra alunos (e-mail ou ID).
+   - Visualiza relatórios e histórico de treino/dor dos alunos.
+   - Recomenda treinos para seus alunos.
+   - Interage na comunidade (postar/comentar).
+   - Recebe notificações sobre atividades críticas dos alunos (ex: dor > 7).
+
+2. ALUNO
+   - Cria conta (e-mail/senha).
+   - Acesso com período de teste grátis (7 dias).
+   - Assina plano mensal ou anual para continuar usando.
+   - Recebe notificação diária lembrando de treinar.
+   - Acessa treinos disponíveis (lista geral + recomendações do personal).
+   - Escolhe treino com base em dor atual ou recomendação.
+   - Executa treino → define status (planned, done, skipped).
+   - Após treino, registra informações de dor (local, intensidade 0–10, quando sentiu).
+   - Visualiza histórico de treinos e dores.
+   - Interage na comunidade (postar/comentar).
+
+ASSINATURA:
+- Valores fixos: R$12,90/mensal ou R$120/anual.
+- Métodos: cartão/Pix via gateway externo.
+- Usuário novo → inicia automaticamente em teste grátis (7 dias).
+- Sem assinatura ativa → acesso bloqueado a treinos (apenas tela de assinatura).
+- Cancelamento: acesso mantido até fim do ciclo já pago.
+- Notificação automática antes do fim do teste.
+
+FLUXOS PRINCIPAIS:
+1. Autenticação
+   - Cadastro com nome, email, senha.
+   - Login via email/senha.
+   - Logout limpa sessão local.
+   - Criação automática de registro em `users` no Supabase.
+
+2. Treinos
+   - Cada treino contém: exercício, séries, repetições.
+   - Exemplos: Agachamento, Flexão, Abdominais, etc.
+   - Status possíveis: planned / done / skipped.
+   - Ao iniciar treino → marca como done, salva timestamp.
+   - Lista exibe apenas treinos do usuário logado.
+   - Histórico acessível no app (por aluno / por personal).
+
+3. Registro de Dor
+   - Slider de intensidade: 0 a 10 (aceita 1 casa decimal, ex: 3.5).
+   - Animação suave no slider + bubble exibindo valor.
+   - Aluno seleciona músculo específico (bíceps, tríceps, quadríceps, panturrilha, etc.).
+   - Cada registro salvo em `dores_logs` com timestamp automático.
+   - Relato de dor é obrigatório após cada treino.
+
+4. Acompanhamento (Personal)
+   - Visualiza lista de alunos vinculados.
+   - Acompanha gráficos e históricos de treino/dor de cada aluno.
+   - Recebe alertas automáticos se aluno registra dor acima de intensidade definida (ex: >7).
+   - Pode recomendar treino específico para aluno.
+
+5. Comunidade
+   - Feed em ordem cronológica.
+   - Postagens: texto (até 1000 caracteres) + imagem opcional.
+   - Comentários: até 300 caracteres.
+   - Não há curtidas, apenas comentários.
+   - Posts e comentários vinculados ao usuário criador.
+
+6. Insights e Gráficos
+   - Gráfico de progresso semanal (últimos 7 dias de treinos).
+   - Gráfico de nível médio de dor (últimos 7 dias).
+   - Dataset estruturado: {labels: ['Seg', 'Ter', ...], values: [2.3, 3.1, ...]}.
+   - Atualização automática a cada novo registro de treino/dor.
+
+7. Navegação
+   - Bottom tabs: Home, Progress, Training, Community.
+   - Home: card do próximo treino + botão iniciar.
+   - Progress: gráficos de evolução (treinos + dor).
+   - Training: lista de treinos.
+   - Community: feed de posts.
+   - Auth: telas de login/cadastro se não logado.
+
+8. Notificações
+   - Push diária para alunos: “Hora do treino”.
+   - Push para aluno antes do fim do período de teste.
+   - Push para personal se aluno reporta dor > X.
+
+REGRAS DE NEGÓCIO:
+- Usuário sem assinatura não acessa treinos.
+- Aluno só pode ter 1 personal vinculado.
+- Personal pode ter vários alunos.
+- Registro de dor obrigatório após treino.
+- Todos registros validam `usuario_id` da sessão.
+- Inputs obrigatórios: nome, email (únicos).
+- Feedback visual obrigatório em UI:
+  - Botões com efeito scale (0.98) ao pressionar.
+  - Inputs exibem erro com borda vermelha.
+  - Cards com sombra e bordas arredondadas.
+  - Loading states em todas operações async.
+
+ESTRUTURA DE BANCO (mínima):
+- users: id, nome, email, senha_hash, tipo (personal/aluno), plano (trial/mensal/anual), data_inicio, data_fim
+- treinos: id, nome, descrição, tipo, séries, repetições, nível
+- treinos_logs: id, usuario_id, treino_id, data, status
+- dores_logs: id, usuario_id, treino_id, data, intensidade, musculo, descricao
+- personal_aluno: id, personal_id, aluno_id, data_vinculo
+- comunidade_posts: id, usuario_id, conteudo, imagem_url, data
+- comunidade_comentarios: id, post_id, usuario_id, conteudo, data
+- pagamentos: id, usuario_id, plano, valor, status, data_inicio, data_fim
+
+SEGURANÇA:
+- Senhas criptografadas.
+- Supabase policies:
+  - Aluno só acessa seus próprios registros.
+  - Personal só acessa dados de alunos vinculados.
+  - Usuário só edita/exclui seus próprios posts/comentários.
+- Logs de atividade básica (último login, última ação).

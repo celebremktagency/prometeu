@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS treinos_logs;

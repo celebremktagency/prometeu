@@ -1,0 +1,4 @@
+-- Exemplo de pagamento
+-- INSERT INTO pagamentos (usuario_id, plano, valor, status, data_inicio, data_fim)
+-- SELECT id, 'mensal', 12.90, 'paid', now(), now() + interval '1 month'
+-- FROM users WHERE tipo = 'aluno' LIMIT 1;
