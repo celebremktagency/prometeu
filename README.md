@@ -187,7 +187,7 @@ npm run type-check    # Verifica tipos TypeScript
 O app utiliza um design system consistente definido em `/app/src/theme/tokens.ts`:
 
 ### Cores
-- **Background:** `#FFFFFF`
+- **// :** `#FFFFFF`
 - **Surface:** `#F7F8FA` 
 - **Accent:** `#06C7C3` (cyan/teal)
 - **Danger:** `#FF4D6D` (para dor/alertas)

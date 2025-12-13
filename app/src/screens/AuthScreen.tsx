@@ -1,286 +1,443 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert,
+import React, { memo, useState, useCallback, useMemo } from 'react';
+import { 
+ View, 
+ Text, 
+ ScrollView, 
+ Alert,
+ TouchableOpacity,
+ KeyboardAvoidingView,
+ Platform 
 } from 'react-native';
-import styled from 'styled-components/native';
-import { colors, typography, spacing, radii } from '../theme/tokens';
-import { ButtonPrimary } from '../components/ButtonPrimary';
-import { useAuth } from '../hooks/useAuth';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
+import { 
+ colors, 
+ typography, 
+ spacing, 
+ borderRadius,
+ Button, 
+ Input, 
+ Card 
+} from '../design-system';
+import { authService } from '../services/authService';
 
 interface AuthScreenProps {
-  navigation: any;
+ navigation: any;
 }
 
-const Container = styled(KeyboardAvoidingView)`
-  flex: 1;
-  background-color: ${colors.bg};
-`;
+interface FormData {
+ nome: string;
+ email: string;
+ senha: string;
+ tipo: 'aluno' | 'personal_trainer';
+}
 
-const ScrollContainer = styled(ScrollView)`
-  flex: 1;
-`;
+interface FormErrors {
+ nome?: string;
+ email?: string;
+ senha?: string;
+ geral?: string;
+}
 
-const Content = styled(View)`
-  flex: 1;
-  justify-content: center;
-  padding: ${spacing.xxl}px ${spacing.lg}px;
-  min-height: 600px;
-`;
+const UserTypeCard = memo<{
+ type: 'aluno' | 'personal_trainer';
+ selected: boolean;
+ onPress: (type: 'aluno' | 'personal_trainer') => void;
+}>(({ type, selected, onPress }) => {
+ const handlePress = useCallback(() => {
+  Haptics.selectionAsync();
+  onPress(type);
+ }, [type, onPress]);
 
-const LogoContainer = styled(View)`
-  align-items: center;
-  margin-bottom: ${spacing.xxl}px;
-`;
+ const config = useMemo(() => {
+  return type === 'aluno' 
+   ? {
+     icon: <Ionicons name="person-outline" size={24} color={selected ? colors.accent.primary : colors.text.secondary} />,
+     title: 'Aluno',
+     subtitle: 'Busco orientação para meus exercícios'
+    }
+   : {
+     icon: <Ionicons name="fitness-outline" size={24} color={selected ? colors.accent.primary : colors.text.secondary} />,
+     title: 'Personal',
+     subtitle: 'Sou instrutor e ajudo alunos'
+    };
+ }, [type, selected]);
 
-const Logo = styled(View)`
-  width: 72px;
-  height: 72px;
-  background-color: ${colors.accent};
-  border-radius: 36px;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: ${spacing.lg}px;
-`;
+ return (
+  <TouchableOpacity 
+   onPress={handlePress}
+   activeOpacity={0.8}
+   style={{
+    flex: 1,
+    marginHorizontal: spacing.xxs,
+   }}
+  >
+   <View style={{
+    backgroundColor: selected ? colors.background.elevated : colors.background.secondary,
+    borderRadius: borderRadius.xl,
+    borderWidth: 2,
+    borderColor: selected ? colors.accent.primary : colors.surface.border,
+    padding: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 130,
+   }}>
+    <View style={{
+     height: 32,
+     justifyContent: 'center',
+     alignItems: 'center',
+    }}>
+     {config.icon}
+    </View>
+    
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: spacing.sm }}>
+     <Text style={{
+      ...typography.presets.cardTitle,
+      marginBottom: spacing.xxs,
+      color: selected ? colors.accent.primary : colors.text.primary,
+     }}>
+      {config.title}
+     </Text>
+     <Text style={{
+      ...typography.presets.caption,
+      textAlign: 'center',
+      lineHeight: 18,
+     }}>
+      {config.subtitle}
+     </Text>
+    </View>
+   </View>
+  </TouchableOpacity>
+ );
+});
 
-const LogoText = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: 32px;
-  font-weight: 700;
-  color: #FFFFFF;
-`;
+export const AuthScreen = memo<AuthScreenProps>(({ navigation }) => {
+ const [isLogin, setIsLogin] = useState(true);
+ const [loading, setLoading] = useState(false);
+ const [formData, setFormData] = useState<FormData>({
+  nome: '',
+  email: '',
+  senha: '',
+  tipo: 'aluno',
+ });
+ const [errors, setErrors] = useState<FormErrors>({});
 
-const Title = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.h1.size}px;
-  font-weight: ${typography.h1.weight};
-  line-height: ${typography.h1.lineHeight}px;
-  color: ${colors.textPrimary};
-  text-align: center;
-  margin-bottom: ${spacing.xl}px;
-`;
+ const validateForm = useCallback((): boolean => {
+  const newErrors: FormErrors = {};
 
-const FormContainer = styled(View)`
-  margin-bottom: ${spacing.xl}px;
-`;
+  if (!isLogin && !formData.nome.trim()) {
+   newErrors.nome = 'Nome é obrigatório';
+  }
 
-const InputContainer = styled(View)`
-  margin-bottom: ${spacing.md}px;
-`;
+  if (!formData.email.trim()) {
+   newErrors.email = 'Email é obrigatório';
+  } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+   newErrors.email = 'Email inválido';
+  }
 
-const Label = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.small.size}px;
-  font-weight: 600;
-  color: ${colors.textPrimary};
-  margin-bottom: ${spacing.sm}px;
-`;
+  if (!formData.senha.trim()) {
+   newErrors.senha = 'Senha é obrigatória';
+  } else if (formData.senha.length < 6) {
+   newErrors.senha = 'Senha deve ter pelo menos 6 caracteres';
+  }
 
-const Input = styled(TextInput)<{ hasError?: boolean }>`
-  height: 56px;
-  background-color: ${colors.neutralLight};
-  border-radius: ${radii.md}px;
-  padding: 0 ${spacing.md}px;
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.body.size}px;
-  color: ${colors.textPrimary};
-  border-width: ${({ hasError }) => hasError ? '2px' : '1px'};
-  border-color: ${({ hasError }) => hasError ? colors.danger : 'transparent'};
-`;
+  setErrors(newErrors);
+  return Object.keys(newErrors).length === 0;
+ }, [formData, isLogin]);
 
-const ErrorText = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.caption.size}px;
-  color: ${colors.danger};
-  margin-top: ${spacing.xs}px;
-`;
+ const handleSubmit = useCallback(async () => {
+  if (!validateForm()) {
+   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+   return;
+  }
 
-const ButtonContainer = styled(View)`
-  margin-bottom: ${spacing.lg}px;
-`;
+  setLoading(true);
+  setErrors({});
 
-const SwitchContainer = styled(View)`
-  align-items: center;
-  margin-bottom: ${spacing.lg}px;
-`;
+  try {
+   if (isLogin) {
+    await authService.signIn(formData.email, formData.senha);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+   } else {
+    await authService.signUp(formData.email, formData.senha, formData.nome, formData.tipo);
+    Alert.alert(
+     'Conta criada!', 
+     'Sua conta foi criada com sucesso. Faça login para continuar.',
+     [{ text: 'OK', onPress: () => setIsLogin(true) }]
+    );
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+   }
+  } catch (error: any) {
+   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+   setErrors({ geral: error.message });
+  } finally {
+   setLoading(false);
+  }
+ }, [formData, isLogin, validateForm]);
 
-const SwitchText = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.small.size}px;
-  color: ${colors.textSecondary};
-`;
-
-const SwitchLink = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.small.size}px;
-  font-weight: 600;
-  color: ${colors.accent};
-`;
-
-const TermsText = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.caption.size}px;
-  color: ${colors.textSecondary};
-  text-align: center;
-  line-height: 18px;
-`;
-
-const TermsLink = styled(Text)`
-  color: ${colors.accent};
-  font-weight: 600;
-`;
-
-export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
+ const toggleMode = useCallback(() => {
+  Haptics.selectionAsync();
+  setIsLogin(!isLogin);
+  setErrors({});
+  setFormData({
+   nome: '',
+   email: '',
+   senha: '',
+   tipo: 'aluno',
   });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  
-  const { signIn, signUp, loading } = useAuth();
+ }, [isLogin]);
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email é obrigatório';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email inválido';
-    }
-
-    if (!formData.password.trim()) {
-      newErrors.password = 'Senha é obrigatória';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Senha deve ter pelo menos 6 caracteres';
-    }
-
-    if (!isLogin && !formData.name.trim()) {
-      newErrors.name = 'Nome é obrigatório';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+ const updateFormData = useCallback((field: keyof FormData) => {
+  return (value: string | 'aluno' | 'personal_trainer') => {
+   setFormData(prev => ({ ...prev, [field]: value }));
+   // Limpar erro do campo quando usuário digita
+   if (errors[field as keyof FormErrors]) {
+    setErrors(prev => ({ ...prev, [field]: undefined }));
+   }
   };
+ }, [errors]);
 
-  const handleSubmit = async () => {
-    if (!validateForm()) return;
+ const selectUserType = useCallback((type: 'aluno' | 'personal_trainer') => {
+  updateFormData('tipo')(type);
+ }, [updateFormData]);
 
-    try {
-      if (isLogin) {
-        await signIn(formData.email, formData.password);
-      } else {
-        await signUp({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-        });
-      }
-    } catch (error: any) {
-      Alert.alert(
-        'Erro',
-        error.message || `Erro ao ${isLogin ? 'fazer login' : 'criar conta'}`
-      );
-    }
-  };
+ const handleForgotPassword = useCallback(async () => {
+  if (!formData.email.trim()) {
+   Alert.alert('Email necessário', 'Por favor, insira seu email para recuperar a senha.');
+   return;
+  }
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
+  if (!/\S+@\S+\.\S+/.test(formData.email)) {
+   Alert.alert('Email inválido', 'Por favor, insira um email válido.');
+   return;
+  }
 
-  return (
-    <Container behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollContainer showsVerticalScrollIndicator={false}>
-        <Content>
-          <LogoContainer>
-            <Logo>
-              <LogoText>P</LogoText>
-            </Logo>
-            <Title>
-              {isLogin ? 'Bem-vindo de volta!' : 'Alcance o seu potencial máximo'}
-            </Title>
-          </LogoContainer>
+  try {
+   setLoading(true);
+   await authService.resetPassword(formData.email);
+   
+   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+   Alert.alert(
+    'Email enviado!', 
+    'Verifique sua caixa de entrada e siga as instruções para redefinir sua senha.',
+    [{ text: 'OK' }]
+   );
+  } catch (error: any) {
+   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+   Alert.alert('Erro', error.message || 'Não foi possível enviar o email de recuperação');
+  } finally {
+   setLoading(false);
+  }
+ }, [formData.email]);
 
-          <FormContainer>
-            {!isLogin && (
-              <InputContainer>
-                <Label>Nome</Label>
-                <Input
-                  value={formData.name}
-                  onChangeText={(value) => handleInputChange('name', value)}
-                  placeholder="Seu nome completo"
-                  placeholderTextColor={colors.textSecondary}
-                  hasError={!!errors.name}
-                  autoCapitalize="words"
-                />
-                {errors.name && <ErrorText>{errors.name}</ErrorText>}
-              </InputContainer>
-            )}
+ return (
+  <LinearGradient
+   colors={colors.gradients.cardDark}
+   style={{ flex: 1 }}
+  >
+   <View style={{ flex: 1, paddingTop: 50 }}>
+    <KeyboardAvoidingView
+     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+     style={{ flex: 1 }}
+    >
+     <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={{
+       paddingHorizontal: spacing.screenHorizontal,
+       paddingVertical: spacing.screenVertical,
+      }}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+     >
+      {/* Header com logo */}
+      <View style={{
+       alignItems: 'center',
+       marginTop: spacing['3xl'],
+       marginBottom: spacing['4xl'],
+      }}>
+       <View style={{
+        width: 80,
+        height: 80,
+        backgroundColor: colors.background.elevated,
+        borderRadius: borderRadius.xl,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: spacing.lg,
+        borderWidth: 2,
+        borderColor: colors.accent.primary,
+       }}>
+        <Text style={{ fontSize: 16 }}>🏋️</Text>
+       </View>
+       
+       <Text style={[
+        typography.presets.screenTitle,
+        { marginBottom: spacing.xs }
+       ]}>
+        {isLogin ? 'Entrar' : 'Criar sua conta'}
+       </Text>
+       
+       <Text style={[
+        typography.presets.body,
+        { textAlign: 'center' }
+       ]}>
+        {isLogin 
+         ? 'Acesse sua conta para continuar'
+         : 'Preencha os dados para começar'
+        }
+       </Text>
+      </View>
 
-            <InputContainer>
-              <Label>Email</Label>
-              <Input
-                value={formData.email}
-                onChangeText={(value) => handleInputChange('email', value)}
-                placeholder="seu@email.com"
-                placeholderTextColor={colors.textSecondary}
-                hasError={!!errors.email}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {errors.email && <ErrorText>{errors.email}</ErrorText>}
-            </InputContainer>
+      {/* Formulário */}
+      <Card variant="glass" padding="lg" style={{ marginBottom: spacing.xl }}>
+       {/* Erro geral */}
+       {errors.geral && (
+        <View style={{
+         backgroundColor: colors.semantic.error + '20',
+         borderWidth: 1,
+         borderColor: colors.semantic.error,
+         borderRadius: borderRadius.md,
+         padding: spacing.sm,
+         marginBottom: spacing.md,
+        }}>
+         <Text style={{
+          color: colors.semantic.error,
+          fontSize: typography.sizes.sm,
+          textAlign: 'center',
+         }}>
+          {errors.geral}
+         </Text>
+        </View>
+       )}
 
-            <InputContainer>
-              <Label>Senha</Label>
-              <Input
-                value={formData.password}
-                onChangeText={(value) => handleInputChange('password', value)}
-                placeholder="Sua senha"
-                placeholderTextColor={colors.textSecondary}
-                hasError={!!errors.password}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {errors.password && <ErrorText>{errors.password}</ErrorText>}
-            </InputContainer>
-          </FormContainer>
+       {/* Nome (só no cadastro) */}
+       {!isLogin && (
+        <Input
+         label="Nome completo"
+         value={formData.nome}
+         onChangeText={updateFormData('nome')}
+         placeholder="Digite seu nome"
+         error={errors.nome}
+         leftIcon={<Ionicons name="person-outline" size={20} color={colors.text.secondary} />}
+         autoCapitalize="words"
+         autoCorrect={false}
+        />
+       )}
 
-          <ButtonContainer>
-            <ButtonPrimary
-              title={isLogin ? 'Entrar' : 'Criar conta'}
-              onPress={handleSubmit}
-              loading={loading}
-            />
-          </ButtonContainer>
+       {/* Tipo de conta (só no cadastro) */}
+       {!isLogin && (
+        <View style={{ marginBottom: spacing.md }}>
+         <Text style={[
+          typography.presets.body,
+          { 
+           color: colors.text.secondary,
+           marginBottom: spacing.sm 
+          }
+         ]}>
+          Tipo de conta
+         </Text>
+         <View style={{ 
+          flexDirection: 'row',
+          gap: spacing.sm 
+         }}>
+          <UserTypeCard
+           type="aluno"
+           selected={formData.tipo === 'aluno'}
+           onPress={selectUserType}
+          />
+          <UserTypeCard
+           type="personal_trainer"
+           selected={formData.tipo === 'personal_trainer'}
+           onPress={selectUserType}
+          />
+         </View>
+        </View>
+       )}
 
-          <SwitchContainer>
-            <SwitchText>
-              {isLogin ? 'Não tem uma conta? ' : 'Já tem uma conta? '}
-              <SwitchLink onPress={() => setIsLogin(!isLogin)}>
-                {isLogin ? 'Criar conta' : 'Fazer login'}
-              </SwitchLink>
-            </SwitchText>
-          </SwitchContainer>
+       {/* Email */}
+       <Input
+        label="Email"
+        value={formData.email}
+        onChangeText={updateFormData('email')}
+        placeholder="seu@email.com"
+        error={errors.email}
+        leftIcon={<Ionicons name="mail-outline" size={20} color={colors.text.secondary} />}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+       />
 
-          <TermsText>
-            Ao continuar, você aceita nossos{' '}
-            <TermsLink>Termos de Uso</TermsLink> e{' '}
-            <TermsLink>Política de Privacidade</TermsLink>
-          </TermsText>
-        </Content>
-      </ScrollContainer>
-    </Container>
-  );
-};
+       {/* Senha */}
+       <Input
+        label="Senha"
+        value={formData.senha}
+        onChangeText={updateFormData('senha')}
+        placeholder="Digite sua senha"
+        error={errors.senha}
+        leftIcon={<Ionicons name="lock-closed-outline" size={20} color={colors.text.secondary} />}
+        secureTextEntry
+        showPasswordToggle
+        autoCapitalize="none"
+        autoCorrect={false}
+       />
+      </Card>
+
+      {/* Botão principal */}
+      <Button
+       title={isLogin ? 'Entrar' : 'Criar Conta'}
+       onPress={handleSubmit}
+       variant="gradient"
+       size="lg"
+       fullWidth
+       loading={loading}
+       style={{ marginBottom: spacing.lg }}
+      />
+
+      {/* Esqueci a senha (só no login) */}
+      {isLogin && (
+       <TouchableOpacity
+        onPress={handleForgotPassword}
+        activeOpacity={0.7}
+        style={{
+         alignItems: 'center',
+         paddingVertical: spacing.sm,
+         marginBottom: spacing.sm,
+        }}
+       >
+        <Text style={[
+         typography.presets.body,
+         { color: colors.accent.primary, textDecorationLine: 'underline' }
+        ]}>
+         Esqueci minha senha
+        </Text>
+       </TouchableOpacity>
+      )}
+
+      {/* Toggle entre login/cadastro */}
+      <TouchableOpacity
+       onPress={toggleMode}
+       activeOpacity={0.7}
+       style={{
+        alignItems: 'center',
+        paddingVertical: spacing.sm,
+       }}
+      >
+       <Text style={[
+        typography.presets.body,
+        { color: colors.text.secondary }
+       ]}>
+        {isLogin ? 'Não tem conta? ' : 'Já tem conta? '}
+        <Text style={{ color: colors.accent.primary }}>
+         {isLogin ? 'Cadastre-se' : 'Entrar'}
+        </Text>
+       </Text>
+      </TouchableOpacity>
+
+      {/* Espaçamento final */}
+      <View style={{ height: spacing['2xl'] }} />
+     </ScrollView>
+    </KeyboardAvoidingView>
+   </View>
+  </LinearGradient>
+ );
+});

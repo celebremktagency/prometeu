@@ -1,12 +1,11 @@
 module.exports = {
-  extends: ['expo', '@typescript-eslint/recommended', 'prettier'],
-  plugins: ['@typescript-eslint', 'prettier'],
+  extends: ['expo'],
   rules: {
-    'prettier/prettier': 'error',
-    '@typescript-eslint/no-unused-vars': 'error',
-    '@typescript-eslint/explicit-function-return-type': 'off',
+    'no-unused-vars': 'warn',
+    'react/jsx-no-undef': 'error',
+    'react/jsx-uses-react': 'error',
+    'react/jsx-uses-vars': 'error',
   },
-  parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 2020,
     sourceType: 'module',

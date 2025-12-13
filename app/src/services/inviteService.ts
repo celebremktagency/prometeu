@@ -1,0 +1,338 @@
+import { supabase } from './supabaseClient';
+
+export interface ProfessionalInvite {
+ id: string;
+ client_id: string;
+ professional_id: string;
+ invite_code: string;
+ status: 'pending' | 'accepted' | 'rejected';
+ created_at: string;
+ expires_at: string;
+ accepted_at?: string;
+}
+
+export interface InviteCode {
+ code: string;
+ type: 'client_to_professional' | 'professional_to_client';
+ created_by: string;
+ expires_at: string;
+}
+
+class InviteService {
+ 
+ async generateProfessionalCode(professionalId: string): Promise<string> {
+  // Generate a unique code for the professional
+  const code = `PT${professionalId.slice(-6).toUpperCase()}`;
+  return code;
+ }
+
+ async generateClientInviteCode(clientId: string): Promise<string> {
+  // Generate a unique invite code for client to invite professional
+  const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const code = `CL${clientId.slice(-4).toUpperCase()}${randomSuffix}`;
+  return code;
+ }
+
+ async sendProfessionalInvite(clientId: string, professionalCode: string): Promise<void> {
+  try {
+   // Find professional by code
+   const professional = await this.findProfessionalByCode(professionalCode);
+
+   // Check if invitation already exists
+   const { data: existingInvite, error: checkError } = await supabase
+    .from('professional_invites')
+    .select('*')
+    .eq('client_id', clientId)
+    .eq('professional_id', professional.user_id)
+    .eq('status', 'pending')
+    .single();
+
+   if (existingInvite) {
+    throw new Error('Você já enviou um convite para este personal trainer');
+   }
+
+   // Create invitation
+   const inviteCode = await this.generateClientInviteCode(clientId);
+   const expiresAt = new Date();
+   expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
+
+   const { error: insertError } = await supabase
+    .from('professional_invites')
+    .insert({
+     client_id: clientId,
+     professional_id: professional.user_id,
+     invite_code: inviteCode,
+     status: 'pending',
+     expires_at: expiresAt.toISOString(),
+    });
+
+   if (insertError) {
+    throw new Error('Erro ao enviar convite: ' + insertError.message);
+   }
+
+   // Here you would typically send a notification to the professional
+   console.log(`Convite enviado para ${professional.nome}`);
+
+  } catch (error: any) {
+   throw new Error(error.message || 'Erro ao enviar convite');
+  }
+ }
+
+ async acceptProfessionalInvite(inviteId: string, professionalId: string): Promise<void> {
+  try {
+   // Update invite status
+   const { error: updateError } = await supabase
+    .from('professional_invites')
+    .update({
+     status: 'accepted',
+     accepted_at: new Date().toISOString(),
+    })
+    .eq('id', inviteId)
+    .eq('professional_id', professionalId);
+
+   if (updateError) {
+    throw new Error('Erro ao aceitar convite: ' + updateError.message);
+   }
+
+   // Get invite details to create relationship
+   const { data: invite, error: inviteError } = await supabase
+    .from('professional_invites')
+    .select('client_id, professional_id')
+    .eq('id', inviteId)
+    .single();
+
+   if (inviteError || !invite) {
+    throw new Error('Convite não encontrado');
+   }
+
+   // Create professional-client relationship
+   const { error: relationError } = await supabase
+    .from('professional_clients')
+    .insert({
+     professional_id: invite.professional_id,
+     client_id: invite.client_id,
+     started_at: new Date().toISOString(),
+     status: 'ativo',
+    });
+
+   if (relationError) {
+    // If relationship already exists, just ignore the error
+    console.log('Relationship might already exist:', relationError.message);
+   }
+
+  } catch (error: any) {
+   throw new Error(error.message || 'Erro ao aceitar convite');
+  }
+ }
+
+ async rejectProfessionalInvite(inviteId: string, professionalId: string): Promise<void> {
+  try {
+   const { error } = await supabase
+    .from('professional_invites')
+    .update({ status: 'rejected' })
+    .eq('id', inviteId)
+    .eq('professional_id', professionalId);
+
+   if (error) {
+    throw new Error('Erro ao rejeitar convite: ' + error.message);
+   }
+
+  } catch (error: any) {
+   throw new Error(error.message || 'Erro ao rejeitar convite');
+  }
+ }
+
+ async getPendingInvites(professionalUserId: string): Promise<ProfessionalInvite[]> {
+  try {
+   const { data, error } = await supabase
+    .from('professional_invites')
+    .select(`
+     *,
+     client:user_profiles!client_id(id, nome, email)
+    `)
+    .eq('professional_id', professionalUserId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+   if (error) {
+    throw new Error('Erro ao carregar convites: ' + error.message);
+   }
+
+   return data || [];
+
+  } catch (error: any) {
+   throw new Error(error.message || 'Erro ao carregar convites');
+  }
+ }
+
+ async getSentInvites(clientId: string): Promise<ProfessionalInvite[]> {
+  try {
+   const { data, error } = await supabase
+    .from('professional_invites')
+    .select(`
+     *,
+     professional:user_profiles!professional_id(id, nome, email)
+    `)
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false });
+
+   if (error) {
+    throw new Error('Erro ao carregar convites enviados: ' + error.message);
+   }
+
+   return data || [];
+
+  } catch (error: any) {
+   throw new Error(error.message || 'Erro ao carregar convites enviados');
+  }
+ }
+
+ async findProfessionalByCode(code: string): Promise<any> {
+  try {
+   // Validate code input
+   if (!code || typeof code !== 'string' || code.trim().length === 0) {
+    throw new Error('Código inválido');
+   }
+   
+   // Extract ID suffix from code (last 6 characters)
+   const cleanCode = code.trim();
+   const professionalIdSuffix = cleanCode.replace('PT', '').toLowerCase();
+   
+   // Get all personal trainers and filter by ID suffix in JavaScript
+   const { data, error } = await supabase
+    .from('user_profiles')
+    .select('id, user_id, nome, email, created_at')
+    .eq('tipo', 'personal_trainer');
+
+   if (error) {
+    throw new Error('Erro ao buscar personal trainer: ' + error.message);
+   }
+
+   if (!data || data.length === 0) {
+    throw new Error('Nenhum personal trainer encontrado');
+   }
+
+   // Find by ID suffix (checking both id and user_id)
+   const matchingProfessional = data.find(prof => {
+    const profId = prof.id?.toString().toLowerCase() || '';
+    const profUserId = prof.user_id?.toString().toLowerCase() || '';
+    return profId.endsWith(professionalIdSuffix) || profUserId.endsWith(professionalIdSuffix);
+   });
+
+   if (!matchingProfessional) {
+    throw new Error('Personal trainer não encontrado com este código');
+   }
+
+   return matchingProfessional;
+
+  } catch (error: any) {
+   throw new Error(error.message || 'Erro ao buscar personal trainer');
+  }
+ }
+
+ async getMyClients(professionalId: string): Promise<any[]> {
+  try {
+   const { data, error } = await supabase
+    .from('professional_clients')
+    .select(`
+     *,
+     client:user_profiles!client_id(id, nome, email, created_at)
+    `)
+    .eq('professional_id', professionalId)
+    .eq('status', 'ativo')
+    .order('started_at', { ascending: false });
+
+   if (error) {
+    throw new Error('Erro ao carregar clientes: ' + error.message);
+   }
+
+   return (data || []).map(item => ({
+    ...item.client,
+    relationship_started: item.started_at,
+    relationship_status: item.status,
+   }));
+
+  } catch (error: any) {
+   throw new Error(error.message || 'Erro ao carregar clientes');
+  }
+ }
+
+ async getMyProfessional(clientId: string): Promise<any | null> {
+  try {
+   const { data, error } = await supabase
+    .from('professional_clients')
+    .select(`
+     *,
+     professional:user_profiles!professional_id(id, nome, email, created_at)
+    `)
+    .eq('client_id', clientId)
+    .eq('status', 'ativo')
+    .single();
+
+   if (error) {
+    // No professional found is not an error
+    if (error.code === 'PGRST116') {
+     return null;
+    }
+    throw new Error('Erro ao carregar personal trainer: ' + error.message);
+   }
+
+   if (!data) {
+    return null;
+   }
+
+   return {
+    ...data.professional,
+    relationship_started: data.started_at,
+    relationship_status: data.status,
+   };
+
+  } catch (error: any) {
+   throw new Error(error.message || 'Erro ao carregar personal trainer');
+  }
+ }
+
+ async connectWithTrainer(code: string): Promise<{ success: boolean; error?: string }> {
+  try {
+   // Get current user
+   const { data: { user } } = await supabase.auth.getUser();
+   if (!user) {
+    return { success: false, error: 'Usuário não autenticado' };
+   }
+
+   // Find professional by code
+   const professional = await this.findProfessionalByCode(code);
+   
+   // Check if already connected
+   const existing = await this.getMyProfessional(user.id);
+   if (existing) {
+    return { success: false, error: 'Você já está conectado a um personal trainer' };
+   }
+
+   // Create professional-client relationship using user_id
+   const { error: relationError } = await supabase
+    .from('professional_clients')
+    .insert({
+     professional_id: professional.user_id, // Use user_id for foreign key
+     client_id: user.id,
+     started_at: new Date().toISOString(),
+     status: 'ativo',
+    });
+
+   if (relationError) {
+    // Check if it's a duplicate error
+    if (relationError.code === '23505') { // Unique constraint violation
+     return { success: false, error: 'Conexão já existe com este personal' };
+    }
+    return { success: false, error: 'Erro ao criar conexão: ' + relationError.message };
+   }
+
+   return { success: true };
+
+  } catch (error: any) {
+   return { success: false, error: error.message || 'Erro ao conectar com personal trainer' };
+  }
+ }
+}
+
+export const inviteService = new InviteService();

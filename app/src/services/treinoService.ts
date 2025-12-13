@@ -1,70 +1,98 @@
-import { supabase } from './supabaseClient';
-import { Treino } from '../types/db';
-
-export interface CreateTreinoData {
-  exercicio: string;
-  series: number;
-  repeticoes: string;
-  status?: 'planned' | 'done' | 'skipped';
-}
-
-export interface UpdateTreinoData {
-  exercicio?: string;
-  series?: number;
-  repeticoes?: string;
-  status?: 'planned' | 'done' | 'skipped';
-}
+import { supabase } from './supabaseClient'
 
 export const treinoService = {
-  async getTreinos(usuarioId: string): Promise<Treino[]> {
-    const { data, error } = await supabase
-      .from('treinos')
-      .select('*')
-      .eq('usuario_id', usuarioId)
-      .order('created_at', { ascending: false });
+ async criarTreino(exercicio: string, descricao?: string): Promise<any> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Usuário não autenticado')
 
-    if (error) throw error;
-    return data || [];
-  },
+  const { data, error } = await supabase
+   .from('treinos')
+   .insert([
+    {
+     exercicio,
+     descricao,
+     usuario_id: user.id,
+     status: 'planned',
+     data_criacao: new Date().toISOString(),
+     series: 3,
+     repeticoes: 10,
+     categoria: 'personalizado',
+     duracao_min: 30,
+     nivel: 'iniciante'
+     // criado_por removido - foreign key com problema
+    }
+   ])
+   .select()
+   .single()
 
-  async createTreino(usuarioId: string, payload: CreateTreinoData): Promise<Treino> {
-    const { data, error } = await supabase
-      .from('treinos')
-      .insert([
-        {
-          usuario_id: usuarioId,
-          ...payload,
-        }
-      ])
-      .select()
-      .single();
+  if (error) throw error
+  return data
+ },
 
-    if (error) throw error;
-    return data;
-  },
+ async listarTreinos(): Promise<any[]> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Usuário não autenticado')
 
-  async updateTreino(id: string, payload: UpdateTreinoData): Promise<Treino> {
-    const { data, error } = await supabase
-      .from('treinos')
-      .update(payload)
-      .eq('id', id)
-      .select()
-      .single();
+  // Buscar todos os treinos disponíveis (incluindo os que têm usuario_id null)
+  const { data, error } = await supabase
+   .from('treinos')
+   .select('*')
+   .order('data_criacao', { ascending: false })
 
-    if (error) throw error;
-    return data;
-  },
+  if (error) throw error
+  return data || []
+ },
 
-  async deleteTreino(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('treinos')
-      .delete()
-      .eq('id', id);
+ async iniciarTreino(id: string): Promise<any> {
+  const { data, error } = await supabase
+   .from('treinos')
+   .update({
+    status: 'in_progress',
+    data_execucao: new Date().toISOString()
+   })
+   .eq('id', id)
+   .select()
+   .single()
 
-    if (error) throw error;
-  },
+  if (error) throw error
+  return data
+ },
 
-  async markTreinoAsDone(id: string): Promise<Treino> {
-    return this.updateTreino(id, { status: 'done' });
-  }
-};
+ async finalizarTreino(id: string, observacoes?: string): Promise<any> {
+  const { data, error } = await supabase
+   .from('treinos')
+   .update({
+    status: 'completed',
+    observacoes
+   })
+   .eq('id', id)
+   .select()
+   .single()
+
+  if (error) throw error
+  return data
+ },
+
+ async listarExercicios(): Promise<any[]> {
+  const { data, error } = await supabase
+   .from('exercises')
+   .select('*')
+   .eq('ativo', true)
+   .order('nome')
+
+  if (error) throw error
+  return data || []
+ },
+
+ async listarWorkoutTemplates(): Promise<any[]> {
+  const { data, error } = await supabase
+   .from('workout_templates')
+   .select('*')
+   .eq('ativo', true)
+   .eq('publico', true)
+   .order('nome')
+
+  if (error) throw error
+  return data || []
+ }
+}

@@ -1,0 +1,10 @@
+# Ignorar arquivos que causam problemas no build
+**/*.test.ts
+**/*.test.tsx
+**/tests/
+**/__tests__/
+**/fix-typescript.js
+**/teste-supabase.js
+SCRIPT_*.sql
+DEBUG_*.sql
+README_*.md

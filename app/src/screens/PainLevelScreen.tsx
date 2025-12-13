@@ -1,309 +1,344 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
+import React, { memo, useState, useCallback } from 'react';
+import { 
+ View, 
+ Text, 
+ ScrollView, 
+ TouchableOpacity, 
+ Alert,
+ TextInput,
+ Vibration 
 } from 'react-native';
-import styled from 'styled-components/native';
-import Icon from 'react-native-vector-icons/Feather';
-import { colors, typography, spacing, radii } from '../theme/tokens';
-import { SliderPain } from '../components/SliderPain';
-import { ButtonPrimary } from '../components/ButtonPrimary';
-import { useAuth } from '../hooks/useAuth';
-import { useInsights } from '../hooks/useInsights';
-import { getPainLevelText } from '../utils/calculations';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
+import {
+ colors,
+ typography,
+ spacing,
+ borderRadius,
+ Button,
+ Card,
+} from '../design-system';
+import { dorService } from '../services/dorService';
 
 interface PainLevelScreenProps {
-  navigation: any;
+ navigation: any;
+ route: {
+  params: {
+   returnTo: string;
+   returnParams?: any;
+   workoutCompleted?: boolean;
+   workoutSummary?: {
+    duration: string;
+    sets: string;
+    exercise: string;
+   };
+  };
+ };
 }
 
-interface Muscle {
-  id: string;
-  name: string;
-  selected: boolean;
-}
+export const PainLevelScreen = memo<PainLevelScreenProps>(({ navigation, route }) => {
+ const { returnTo, returnParams, workoutCompleted, workoutSummary } = route.params;
+ const [painLevel, setPainLevel] = useState(0);
+ const [painLocation, setPainLocation] = useState('');
+ const [painDescription, setPainDescription] = useState('');
+ const [loading, setLoading] = useState(false);
 
-const Container = styled(View)`
-  flex: 1;
-  background-color: ${colors.bg};
-`;
+ const painLevels = [
+  { level: 0, label: 'Sem dor', emoji: '', color: colors.accent.secondary },
+  { level: 1, label: 'Muito leve', emoji: '🙂', color: '#90EE90' },
+  { level: 2, label: 'Leve', emoji: '😐', color: '#FFE135' },
+  { level: 3, label: 'Moderada', emoji: '😕', color: '#FFA500' },
+  { level: 4, label: 'Forte', emoji: '😖', color: '#FF6B6B' },
+  { level: 5, label: 'Muito forte', emoji: '😣', color: colors.semantic.error },
+ ];
 
-const Header = styled(View)`
-  padding: ${spacing.lg}px;
-  padding-top: ${spacing.xl}px;
-  border-bottom-width: 1px;
-  border-bottom-color: ${colors.cardBorder};
-`;
+ const commonPainLocations = [
+  'Joelho', 'Costas', 'Ombro', 'Pescoço', 'Quadril', 
+  'Punho', 'Tornozelo', 'Lombar', 'Cervical', 'Outro'
+ ];
 
-const Title = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.h1.size}px;
-  font-weight: ${typography.h1.weight};
-  line-height: ${typography.h1.lineHeight}px;
-  color: ${colors.textPrimary};
-  text-align: center;
-  margin-bottom: ${spacing.sm}px;
-`;
+ const handleGoBack = useCallback(() => {
+  Haptics.selectionAsync();
+  navigation.goBack();
+ }, [navigation]);
 
-const Subtitle = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.body.size}px;
-  color: ${colors.textSecondary};
-  text-align: center;
-`;
-
-const Content = styled(ScrollView)`
-  flex: 1;
-`;
-
-const LeftColumn = styled(View)`
-  flex: 1;
-  padding: ${spacing.lg}px;
-`;
-
-const RightColumn = styled(View)`
-  width: 50%;
-  justify-content: center;
-  align-items: center;
-  padding: ${spacing.lg}px;
-`;
-
-const Row = styled(View)`
-  flex-direction: row;
-`;
-
-const SliderSection = styled(View)`
-  margin-bottom: ${spacing.xl}px;
-`;
-
-const SliderLabel = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.h3.size}px;
-  font-weight: ${typography.h3.weight};
-  color: ${colors.textPrimary};
-  margin-bottom: ${spacing.sm}px;
-`;
-
-const PainLevelText = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.body.size}px;
-  color: ${colors.textSecondary};
-  margin-bottom: ${spacing.lg}px;
-  text-align: center;
-`;
-
-const MuscleSection = styled(View)`
-  margin-bottom: ${spacing.xl}px;
-`;
-
-const SectionTitle = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.h3.size}px;
-  font-weight: ${typography.h3.weight};
-  color: ${colors.textPrimary};
-  margin-bottom: ${spacing.md}px;
-`;
-
-const MuscleItem = styled(TouchableOpacity)<{ selected: boolean }>`
-  height: 72px;
-  border-radius: ${radii.md}px;
-  border-width: 1px;
-  border-color: ${({ selected }) => selected ? colors.accent : colors.cardBorder};
-  background-color: ${({ selected }) => 
-    selected ? 'rgba(6, 199, 195, 0.06)' : colors.bg
-  };
-  flex-direction: row;
-  align-items: center;
-  padding: 0 ${spacing.md}px;
-  margin-bottom: ${spacing.sm}px;
-`;
-
-const MuscleIndicator = styled(View)<{ selected: boolean }>`
-  width: 36px;
-  height: 36px;
-  border-radius: 18px;
-  background-color: ${({ selected }) => 
-    selected ? colors.accent : colors.neutralLight
-  };
-  justify-content: center;
-  align-items: center;
-  margin-right: ${spacing.md}px;
-`;
-
-const MuscleText = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: 18px;
-  font-weight: 600;
-  color: ${colors.textPrimary};
-  flex: 1;
-`;
-
-const HumanSilhouette = styled(View)`
-  width: 150px;
-  height: 300px;
-  background-color: ${colors.neutralLight};
-  border-radius: ${radii.lg}px;
-  justify-content: center;
-  align-items: center;
-  border-width: 2px;
-  border-color: ${colors.cardBorder};
-`;
-
-const SilhouetteText = styled(Text)`
-  font-family: ${typography.fontFamilyPrimary};
-  font-size: ${typography.small.size}px;
-  color: ${colors.textSecondary};
-  text-align: center;
-`;
-
-const ButtonContainer = styled(View)`
-  padding: ${spacing.lg}px;
-  padding-bottom: ${spacing.xl}px;
-`;
-
-const MUSCLES: Muscle[] = [
-  { id: 'biceps', name: 'Bíceps', selected: false },
-  { id: 'triceps', name: 'Tríceps', selected: false },
-  { id: 'ombros', name: 'Ombros', selected: false },
-  { id: 'peito', name: 'Peito', selected: false },
-  { id: 'costas', name: 'Costas', selected: false },
-  { id: 'abdomen', name: 'Abdômen', selected: false },
-  { id: 'quadriceps', name: 'Quadríceps', selected: false },
-  { id: 'panturrilha', name: 'Panturrilha', selected: false },
-  { id: 'gluteos', name: 'Glúteos', selected: false },
-];
-
-export const PainLevelScreen: React.FC<PainLevelScreenProps> = ({ navigation }) => {
-  const [painLevel, setPainLevel] = useState(0);
-  const [muscles, setMuscles] = useState<Muscle[]>(MUSCLES);
-  
-  const { user } = useAuth();
-  const { recordDor, isRecordingDor } = useInsights(user?.id);
-
-  const selectedMuscles = muscles.filter(muscle => muscle.selected);
-
-  const toggleMuscle = (muscleId: string) => {
-    setMuscles(prev => 
-      prev.map(muscle => 
-        muscle.id === muscleId 
-          ? { ...muscle, selected: !muscle.selected }
-          : muscle
-      )
-    );
-  };
-
-  const handleSubmit = async () => {
-    if (selectedMuscles.length === 0) {
-      Alert.alert(
-        'Selecione um músculo',
-        'Por favor, selecione pelo menos um músculo para registrar a dor.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    if (!user?.id) {
-      Alert.alert('Erro', 'Usuário não encontrado');
-      return;
-    }
-
-    try {
-      // Record pain for each selected muscle
-      for (const muscle of selectedMuscles) {
-        await recordDor({
-          usuarioId: user.id,
-          musculo: muscle.name,
-          nivel: painLevel,
-        });
+ const handleSavePain = useCallback(async () => {
+  if (painLevel === 0) {
+   // No pain, just go back with success message
+   if (workoutCompleted) {
+    Alert.alert(
+     'Ótimo! ',
+     `Treino concluído com sucesso!\n\n${workoutSummary?.exercise}\nDuração: ${workoutSummary?.duration}\nSéries: ${workoutSummary?.sets}`,
+     [{ 
+      text: 'Voltar', 
+      onPress: () => {
+       if (returnTo === 'ProgramExecution') {
+        navigation.navigate(returnTo, returnParams);
+       } else {
+        navigation.navigate('Home');
+       }
       }
+     }]
+    );
+   } else {
+    navigation.navigate(returnTo, returnParams);
+   }
+   return;
+  }
 
-      Alert.alert(
-        'Registrado com sucesso!',
-        `Nível de dor ${painLevel.toFixed(1)} registrado para ${selectedMuscles.length} músculo${selectedMuscles.length > 1 ? 's' : ''}.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Reset form
-              setPainLevel(0);
-              setMuscles(MUSCLES);
-              // Navigate to Progress to see the updated chart
-              navigation.navigate('Progress');
-            }
+  if (!painLocation.trim()) {
+   Alert.alert('Atenção', 'Por favor, informe onde está sentindo dor.');
+   return;
+  }
+
+  try {
+   setLoading(true);
+   
+   await dorService.registrarDor({
+    nivel: painLevel,
+    localizacao: painLocation,
+    descricao: painDescription,
+    contexto: workoutCompleted ? 'pós-treino' : 'durante-treino',
+    exercicio_relacionado: workoutSummary?.exercise
+   });
+
+   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+   Vibration.vibrate(100);
+
+   Alert.alert(
+    workoutCompleted ? 'Dor registrada' : 'Dor registrada - Pare o exercício',
+    workoutCompleted 
+     ? `Sua dor foi registrada. Recomendamos consultar um profissional.\n\nTreino: ${workoutSummary?.exercise}\nDuração: ${workoutSummary?.duration}`
+     : 'Pare imediatamente o exercício e descanse. Sua dor foi registrada.',
+    [{ 
+     text: 'Entendi', 
+     onPress: () => {
+      if (returnTo === 'ProgramExecution') {
+       navigation.navigate(returnTo, returnParams);
+      } else {
+       navigation.navigate('Home');
+      }
+     }
+    }]
+   );
+  } catch (error: any) {
+   Alert.alert('Erro', error.message || 'Não foi possível registrar a dor');
+  } finally {
+   setLoading(false);
+  }
+ }, [painLevel, painLocation, painDescription, navigation, returnTo, returnParams, workoutCompleted, workoutSummary]);
+
+ return (
+  <LinearGradient
+   colors={[colors.background.primary, colors.background.secondary]}
+   style={{ flex: 1 }}
+  >
+   <SafeAreaView style={{ flex: 1 }}>
+    {/* Header */}
+    <View style={{
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'center',
+     paddingHorizontal: spacing.screenHorizontal,
+     paddingVertical: spacing.screenVertical,
+    }}>
+     <TouchableOpacity onPress={handleGoBack}>
+      <Text style={{ fontSize: 24, color: colors.text.primary }}>←</Text>
+     </TouchableOpacity>
+     
+     <Text style={typography.presets.screenTitle}>
+      Como você se sentiu?
+     </Text>
+     
+     <View style={{ width: 24 }} />
+    </View>
+
+    <ScrollView
+     style={{ flex: 1 }}
+     contentContainerStyle={{
+      paddingHorizontal: spacing.screenHorizontal,
+      paddingBottom: spacing.screenVertical,
+     }}
+     showsVerticalScrollIndicator={false}
+    >
+     {workoutCompleted && workoutSummary && (
+      <Card variant="elevated" padding="lg" style={{ marginBottom: spacing.lg }}>
+       <Text style={[typography.presets.cardTitle, { marginBottom: spacing.sm }]}>
+         Exercício Concluído
+       </Text>
+       <Text style={[typography.presets.body, { marginBottom: spacing.xs }]}>
+        <Text style={{ fontWeight: '600' }}>Exercício:</Text> {workoutSummary.exercise}
+       </Text>
+       <Text style={[typography.presets.body, { marginBottom: spacing.xs }]}>
+        <Text style={{ fontWeight: '600' }}>Duração:</Text> {workoutSummary.duration}
+       </Text>
+       <Text style={[typography.presets.body]}>
+        <Text style={{ fontWeight: '600' }}>Séries:</Text> {workoutSummary.sets}
+       </Text>
+      </Card>
+     )}
+
+     {/* Pain Level Selection */}
+     <Card variant="elevated" padding="lg" style={{ marginBottom: spacing.lg }}>
+      <Text style={[typography.presets.cardTitle, { marginBottom: spacing.md }]}>
+       Nível de Dor/Desconforto
+      </Text>
+      
+      <View style={{
+       flexDirection: 'row',
+       flexWrap: 'wrap',
+       gap: spacing.sm,
+      }}>
+       {painLevels.map((level) => (
+        <TouchableOpacity
+         key={level.level}
+         onPress={() => {
+          setPainLevel(level.level);
+          Haptics.selectionAsync();
+         }}
+         style={{
+          backgroundColor: painLevel === level.level ? level.color : colors.background.secondary,
+          borderRadius: borderRadius.md,
+          padding: spacing.md,
+          minWidth: '30%',
+          alignItems: 'center',
+          borderWidth: painLevel === level.level ? 2 : 1,
+          borderColor: painLevel === level.level ? level.color : colors.surface.border,
+         }}
+        >
+         <Text style={{ fontSize: 24, marginBottom: spacing.xs }}>
+          {level.emoji}
+         </Text>
+         <Text style={[
+          typography.presets.caption,
+          { 
+           fontWeight: '600',
+           textAlign: 'center',
+           color: painLevel === level.level ? 'white' : colors.text.primary
           }
-        ]
-      );
-    } catch (error) {
-      Alert.alert(
-        'Erro',
-        'Não foi possível registrar a dor. Tente novamente.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
+         ]}>
+          {level.level}
+         </Text>
+         <Text style={[
+          typography.presets.caption,
+          { 
+           textAlign: 'center',
+           color: painLevel === level.level ? 'white' : colors.text.secondary
+          }
+         ]}>
+          {level.label}
+         </Text>
+        </TouchableOpacity>
+       ))}
+      </View>
+     </Card>
 
-  return (
-    <Container>
-      <Header>
-        <Title>Registro de Dor</Title>
-        <Subtitle>Avalie sua dor em uma escala de 0 a 10</Subtitle>
-      </Header>
+     {painLevel > 0 && (
+      <>
+       {/* Pain Location */}
+       <Card variant="elevated" padding="lg" style={{ marginBottom: spacing.lg }}>
+        <Text style={[typography.presets.cardTitle, { marginBottom: spacing.md }]}>
+         Onde está a dor?
+        </Text>
+        
+        <View style={{
+         flexDirection: 'row',
+         flexWrap: 'wrap',
+         gap: spacing.sm,
+         marginBottom: spacing.md,
+        }}>
+         {commonPainLocations.map((location) => (
+          <TouchableOpacity
+           key={location}
+           onPress={() => {
+            setPainLocation(location);
+            Haptics.selectionAsync();
+           }}
+           style={{
+            backgroundColor: painLocation === location ? colors.accent.primary : colors.background.secondary,
+            borderRadius: borderRadius.sm,
+            paddingHorizontal: spacing.md,
+            paddingVertical: spacing.sm,
+            borderWidth: 1,
+            borderColor: painLocation === location ? colors.accent.primary : colors.surface.border,
+           }}
+          >
+           <Text style={[
+            typography.presets.caption,
+            { 
+             color: painLocation === location ? 'white' : colors.text.primary,
+             fontWeight: '600'
+            }
+           ]}>
+            {location}
+           </Text>
+          </TouchableOpacity>
+         ))}
+        </View>
 
-      <Content showsVerticalScrollIndicator={false}>
-        <Row>
-          <LeftColumn>
-            <SliderSection>
-              <SliderLabel>Nível de Dor</SliderLabel>
-              <PainLevelText>{getPainLevelText(painLevel)}</PainLevelText>
-              <SliderPain
-                value={painLevel}
-                onValueChange={setPainLevel}
-                min={0}
-                max={10}
-                step={0.5}
-              />
-            </SliderSection>
-
-            <MuscleSection>
-              <SectionTitle>Selecione os músculos</SectionTitle>
-              {muscles.map((muscle) => (
-                <MuscleItem
-                  key={muscle.id}
-                  selected={muscle.selected}
-                  onPress={() => toggleMuscle(muscle.id)}
-                  activeOpacity={0.7}
-                >
-                  <MuscleIndicator selected={muscle.selected}>
-                    {muscle.selected ? (
-                      <Icon name="check" size={16} color="#FFFFFF" />
-                    ) : null}
-                  </MuscleIndicator>
-                  <MuscleText>{muscle.name}</MuscleText>
-                </MuscleItem>
-              ))}
-            </MuscleSection>
-          </LeftColumn>
-
-          <RightColumn>
-            <HumanSilhouette>
-              <SilhouetteText>
-                Silhueta{'\n'}Humana{'\n'}(Placeholder)
-              </SilhouetteText>
-            </HumanSilhouette>
-          </RightColumn>
-        </Row>
-      </Content>
-
-      <ButtonContainer>
-        <ButtonPrimary
-          title="Próximo"
-          onPress={handleSubmit}
-          loading={isRecordingDor}
-          disabled={selectedMuscles.length === 0 || painLevel === 0}
+        <TextInput
+         style={{
+          backgroundColor: colors.background.secondary,
+          borderRadius: borderRadius.md,
+          padding: spacing.md,
+          borderWidth: 1,
+          borderColor: colors.surface.border,
+          color: colors.text.primary,
+          fontSize: 16,
+         }}
+         placeholder="Ou digite outra localização..."
+         placeholderTextColor={colors.text.tertiary}
+         value={painLocation}
+         onChangeText={setPainLocation}
         />
-      </ButtonContainer>
-    </Container>
-  );
-};
+       </Card>
+
+       {/* Pain Description */}
+       <Card variant="elevated" padding="lg" style={{ marginBottom: spacing.lg }}>
+        <Text style={[typography.presets.cardTitle, { marginBottom: spacing.md }]}>
+         Descrição da dor (opcional)
+        </Text>
+        
+        <TextInput
+         style={{
+          backgroundColor: colors.background.secondary,
+          borderRadius: borderRadius.md,
+          padding: spacing.md,
+          borderWidth: 1,
+          borderColor: colors.surface.border,
+          color: colors.text.primary,
+          fontSize: 16,
+          minHeight: 100,
+          textAlignVertical: 'top',
+         }}
+         placeholder="Descreva a dor: é uma fisgada? Queimação? Pontada? O que sente exatamente?"
+         placeholderTextColor={colors.text.tertiary}
+         value={painDescription}
+         onChangeText={setPainDescription}
+         multiline={true}
+         numberOfLines={4}
+        />
+       </Card>
+      </>
+     )}
+
+     {/* Action Button */}
+     <Button
+      title={
+       painLevel === 0 
+        ? (workoutCompleted ? " Finalizei sem dor!" : " Continuar sem dor")
+        : " Registrar dor"
+      }
+      onPress={handleSavePain}
+      variant={painLevel === 0 ? "gradient" : "secondary"}
+      size="lg"
+      loading={loading}
+     />
+
+     <View style={{ height: spacing.xl * 2 }} />
+    </ScrollView>
+   </SafeAreaView>
+  </LinearGradient>
+ );
+});
