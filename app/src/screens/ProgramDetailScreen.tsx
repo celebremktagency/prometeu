@@ -10,24 +10,24 @@ import {
   Button,
   Card,
   MetricCard,
-  YouTubePreview,
   Icon,
 } from '../design-system';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { supabase } from '../services/supabaseClient';
 import { authService } from '../services/authService';
 
-interface ExerciseDetailScreenProps {
+interface ProgramDetailScreenProps {
   navigation: any;
   route: {
     params: {
-      exercise: any;
+      program?: any;
+      template?: any; // Para compatibilidade
     };
   };
 }
 
-export const ExerciseDetailScreen = memo<ExerciseDetailScreenProps>(({ navigation, route }) => {
-  const { exercise } = route.params;
+export const ProgramDetailScreen = memo<ProgramDetailScreenProps>(({ navigation, route }) => {
+  const program = route.params?.program || route.params?.template;
   const [loading, setLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
 
@@ -49,13 +49,13 @@ export const ExerciseDetailScreen = memo<ExerciseDetailScreenProps>(({ navigatio
     navigation.goBack();
   }, [navigation]);
 
-  const handleStartWorkout = useCallback(() => {
+  const handleStartProgram = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert('Em breve', 'Funcionalidade de iniciar treino em desenvolvimento');
+    Alert.alert('Em breve', 'Funcionalidade de iniciar programa em desenvolvimento');
   }, []);
 
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
+  const getLevelColor = (nivel: string) => {
+    switch (nivel) {
       case 'iniciante': return colors.accent.secondary;
       case 'intermediario': return colors.semantic.warning;
       case 'avancado': return colors.semantic.error;
@@ -63,8 +63,8 @@ export const ExerciseDetailScreen = memo<ExerciseDetailScreenProps>(({ navigatio
     }
   };
 
-  const getDifficultyIcon = (difficulty: string) => {
-    switch (difficulty) {
+  const getLevelIcon = (nivel: string) => {
+    switch (nivel) {
       case 'iniciante': return '🟢';
       case 'intermediario': return '🟡';
       case 'avancado': return '🔴';
@@ -72,7 +72,19 @@ export const ExerciseDetailScreen = memo<ExerciseDetailScreenProps>(({ navigatio
     }
   };
 
-  const isOwner = userProfile?.user_id === exercise.criado_por;
+  const getCategoryIcon = (categoria: string) => {
+    switch (categoria) {
+      case 'Hipertrofia': return '💪';
+      case 'Emagrecimento': return '🔥';
+      case 'Força': return '🏋️';
+      case 'Condicionamento': return '🏃';
+      case 'Reabilitação': return '🏥';
+      case 'Flexibilidade': return '🧘';
+      default: return '📋';
+    }
+  };
+
+  const isOwner = userProfile?.user_id === program?.criado_por;
 
   return (
     <ScreenWrapper navigation={navigation} showTabBar={false}>
@@ -93,7 +105,7 @@ export const ExerciseDetailScreen = memo<ExerciseDetailScreenProps>(({ navigatio
           </TouchableOpacity>
           
           <Text style={typography.presets.screenTitle}>
-            Detalhes
+            Programa
           </Text>
           
           {isOwner && (
@@ -121,34 +133,25 @@ export const ExerciseDetailScreen = memo<ExerciseDetailScreenProps>(({ navigatio
             }}>
               <View style={{ flex: 1 }}>
                 <Text style={[typography.presets.cardTitle, { marginBottom: spacing.xs }]}>
-                  {exercise.nome}
+                  {program?.nome}
                 </Text>
-                
-                {exercise.grupo_muscular && exercise.grupo_muscular.length > 0 && (
-                  <View style={{
-                    flexDirection: 'row',
-                    flexWrap: 'wrap',
-                    gap: spacing.xs,
-                    marginBottom: spacing.sm,
-                  }}>
-                    {exercise.grupo_muscular.map((group: string, index: number) => (
-                      <View key={index} style={{
-                        backgroundColor: colors.surface.card,
-                        paddingHorizontal: spacing.sm,
-                        paddingVertical: spacing.xs,
-                        borderRadius: borderRadius.sm,
-                      }}>
-                        <Text style={[typography.presets.caption, { color: colors.accent.primary }]}>
-                          {group}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: spacing.sm,
+                  marginBottom: spacing.sm,
+                }}>
+                  <Text style={{ fontSize: 16 }}>
+                    {getCategoryIcon(program?.categoria)}
+                  </Text>
+                  <Text style={[typography.presets.caption, { color: colors.text.secondary }]}>
+                    {program?.categoria}
+                  </Text>
+                </View>
               </View>
               
               <View style={{
-                backgroundColor: getDifficultyColor(exercise.dificuldade),
+                backgroundColor: getLevelColor(program?.nivel),
                 paddingHorizontal: spacing.sm,
                 paddingVertical: spacing.xs,
                 borderRadius: borderRadius.sm,
@@ -157,12 +160,12 @@ export const ExerciseDetailScreen = memo<ExerciseDetailScreenProps>(({ navigatio
                   typography.presets.caption,
                   { color: colors.text.inverse, fontWeight: '600' }
                 ]}>
-                  {getDifficultyIcon(exercise.dificuldade)} {exercise.dificuldade?.toUpperCase() || 'INICIANTE'}
+                  {getLevelIcon(program?.nivel)} {program?.nivel?.toUpperCase() || 'INICIANTE'}
                 </Text>
               </View>
             </View>
 
-            {exercise.descricao && (
+            {program?.descricao && (
               <View style={{
                 backgroundColor: colors.surface.card,
                 borderRadius: borderRadius.md,
@@ -170,74 +173,126 @@ export const ExerciseDetailScreen = memo<ExerciseDetailScreenProps>(({ navigatio
                 marginBottom: spacing.sm,
               }}>
                 <Text style={[typography.presets.body, { lineHeight: 20 }]}>
-                  {exercise.descricao}
+                  {program?.descricao}
                 </Text>
               </View>
             )}
 
-            {/* Equipment Info */}
+            {/* Program Info */}
             <View style={{
               flexDirection: 'row',
               alignItems: 'center',
               gap: spacing.sm,
               marginTop: spacing.sm,
             }}>
-              <Icon name="tool" size={16} color={colors.text.primary} />
+              <Icon name="calendar" size={16} color={colors.text.primary} />
               <Text style={[typography.presets.caption, { color: colors.text.tertiary }]}>
-                Equipamento: {exercise.equipamento || 'Peso corporal'}
+                {program?.duracao_semanas || 4} semanas • {program?.frequencia_semanal || 3}x por semana
               </Text>
             </View>
           </Card>
 
-          {/* Instructions */}
-          {exercise.instrucoes && (
+          {/* Stats */}
+          <View style={{
+            flexDirection: 'row',
+            gap: spacing.sm,
+            marginBottom: spacing.lg,
+          }}>
+            <MetricCard
+              value={program?.duracao_semanas || 4}
+              label="Semanas"
+              icon={<Icon name="calendar" size={16} color={colors.accent.primary} />}
+              accentColor={colors.accent.primary}
+              size="sm"
+              style={{ flex: 1 }}
+            />
+            <MetricCard
+              value={`${program?.frequencia_semanal || 3}x`}
+              label="Por Semana"
+              icon={<Icon name="repeat" size={16} color={colors.accent.secondary} />}
+              accentColor={colors.accent.secondary}
+              size="sm"
+              style={{ flex: 1 }}
+            />
+            <MetricCard
+              value={program?.objetivo || 'Geral'}
+              label="Objetivo"
+              icon={<Icon name="target" size={16} color={colors.semantic.warning} />}
+              accentColor={colors.semantic.warning}
+              size="sm"
+              style={{ flex: 1 }}
+            />
+          </View>
+
+          {/* Program Details */}
+          {program?.objetivo && (
             <Card variant="elevated" padding="lg" style={{ marginBottom: spacing.lg }}>
               <Text style={[typography.presets.sectionTitle, { marginBottom: spacing.md }]}>
-                Como Executar
+                Objetivo do Programa
               </Text>
               <Text style={[typography.presets.body, { lineHeight: 22 }]}>
-                {exercise.instrucoes}
+                {program?.objetivo}
               </Text>
             </Card>
           )}
 
-          {/* Safety Tips */}
-          {exercise.dicas_seguranca && (
+          {/* Tags */}
+          {program?.tags && program?.tags.length > 0 && (
             <Card variant="glass" padding="lg" style={{ marginBottom: spacing.lg }}>
+              <Text style={[typography.presets.sectionTitle, { marginBottom: spacing.md }]}>
+                Tags
+              </Text>
               <View style={{
                 flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.sm,
-                marginBottom: spacing.md,
+                flexWrap: 'wrap',
+                gap: spacing.xs,
               }}>
-                <Icon name="warning" size={20} color={colors.semantic.warning} />
-                <Text style={[typography.presets.sectionTitle, { color: colors.semantic.warning }]}>
-                  Dicas de Segurança
-                </Text>
+                {program?.tags.map((tag: string, index: number) => (
+                  <View key={index} style={{
+                    backgroundColor: colors.surface.card,
+                    paddingHorizontal: spacing.sm,
+                    paddingVertical: spacing.xs,
+                    borderRadius: borderRadius.sm,
+                  }}>
+                    <Text style={[typography.presets.caption, { color: colors.accent.primary }]}>
+                      #{tag}
+                    </Text>
+                  </View>
+                ))}
               </View>
-              <Text style={[typography.presets.body, { lineHeight: 22 }]}>
-                {exercise.dicas_seguranca}
-              </Text>
             </Card>
           )}
 
-          {/* YouTube Preview */}
-          {exercise.video_url && (
-            <YouTubePreview
-              url={exercise.video_url}
-              title="Vídeo Demonstrativo"
-              style={{ marginBottom: spacing.lg }}
-            />
-          )}
-
-          {/* Action Button */}
+          {/* Action Buttons */}
           <Button
-            title=" Usar Exercício"
-            onPress={handleStartWorkout}
+            title=" Iniciar Programa"
+            onPress={handleStartProgram}
             variant="gradient"
             size="lg"
             style={{ marginBottom: spacing.md }}
           />
+
+          {isOwner && (
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <Button
+                title="Editar"
+                onPress={() => Alert.alert('Em breve', 'Edição em desenvolvimento')}
+                variant="secondary"
+                size="md"
+                icon={<Icon name="edit" size={14} color={colors.text.primary} />}
+                style={{ flex: 1 }}
+              />
+              
+              <Button
+                title="Duplicar"
+                onPress={() => Alert.alert('Em breve', 'Duplicação em desenvolvimento')}
+                variant="ghost"
+                size="md"
+                icon={<Icon name="copy" size={14} color={colors.text.primary} />}
+                style={{ flex: 1 }}
+              />
+            </View>
+          )}
 
           {/* Espaçamento final */}
           <View style={{ height: spacing.xl }} />
@@ -247,4 +302,4 @@ export const ExerciseDetailScreen = memo<ExerciseDetailScreenProps>(({ navigatio
   );
 });
 
-export default ExerciseDetailScreen;
+export default ProgramDetailScreen;
