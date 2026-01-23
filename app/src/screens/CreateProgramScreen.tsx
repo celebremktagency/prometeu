@@ -14,6 +14,7 @@ import {
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { programaService } from '../services/programaService';
 import { treinoNovoService } from '../services/treinoNovoService';
+import { supabase } from '../services/supabaseClient';
 import { Treino, TreinoCompleto } from '../types';
 
 interface CreateProgramScreenProps {
@@ -159,6 +160,13 @@ export const CreateProgramScreen = memo<CreateProgramScreenProps>(({ navigation 
     try {
       setLoading(true);
 
+      // Obter usuário atual
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Erro', 'Você precisa estar logado para criar um programa');
+        return;
+      }
+
       // Criar programa
       const programaData = {
         nome: formData.nome.trim(),
@@ -168,7 +176,8 @@ export const CreateProgramScreen = memo<CreateProgramScreenProps>(({ navigation 
         frequencia_semanal: parseInt(formData.frequencia_semanal) || 3,
         nivel: formData.nivel,
         categoria: formData.categoria,
-        is_publico: formData.is_publico
+        is_publico: formData.is_publico,
+        criado_por: user.id
       };
 
       const response = await programaService.criar(programaData);
