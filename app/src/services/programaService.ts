@@ -147,11 +147,11 @@ class ProgramaService {
         error: null,
         success: true
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao criar programa:', error);
       return {
         data: null,
-        error: 'Erro ao criar programa',
+        error: error.message || error.error_description || 'Erro ao criar programa',
         success: false
       };
     }

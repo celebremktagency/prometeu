@@ -170,14 +170,15 @@ export const CreateProgramScreen = memo<CreateProgramScreenProps>(({ navigation 
       // Criar programa
       const programaData = {
         nome: formData.nome.trim(),
-        descricao: formData.descricao.trim() || undefined,
+        descricao: formData.descricao.trim() || null,
         objetivo: formData.objetivo,
         duracao_semanas: parseInt(formData.duracao_semanas) || 4,
         frequencia_semanal: parseInt(formData.frequencia_semanal) || 3,
         nivel: formData.nivel,
         categoria: formData.categoria,
         is_publico: formData.is_publico,
-        criado_por: user.id
+        criado_por: user.id,
+        tags: [formData.categoria.toLowerCase(), formData.nivel]
       };
 
       const response = await programaService.criar(programaData);
