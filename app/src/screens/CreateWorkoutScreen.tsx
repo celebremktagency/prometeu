@@ -1,5 +1,5 @@
-import React, { memo, useState, useCallback } from 'react';
-import { View, Text, ScrollView, Alert, TouchableOpacity, TextInput } from 'react-native';
+import React, { memo, useState, useCallback, useEffect } from 'react';
+import { View, Text, ScrollView, Alert, TouchableOpacity, TextInput, FlatList } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,9 @@ import {
  Card,
 } from '../design-system';
 import { ScreenWrapper } from '../components/ScreenWrapper';
-import { supabase } from '../services/supabaseClient';
+import { exercicioService } from '../services/exercicioService';
+import { treinoNovoService } from '../services/treinoNovoService';
+import { Exercicio } from '../types';
 
 interface CreateWorkoutScreenProps {
  navigation: any;
@@ -25,19 +27,21 @@ interface CreateWorkoutScreenProps {
 
 export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation, route }) => {
  const template = route?.params?.template;
+ const [currentStep, setCurrentStep] = useState(1);
+ const totalSteps = 3;
  
  const [formData, setFormData] = useState({
-  exercicio: template?.exercicio || '',
+  nome: template?.nome || '',
   descricao: template?.descricao || '',
-  series: template?.series?.toString() || '3',
-  repeticoes: template?.repeticoes?.toString() || '10',
+  objetivo: template?.objetivo || 'hipertrofia',
   nivel: template?.nivel || 'iniciante',
-  categoria: template?.categoria || 'personalizado',
-  duracao_min: template?.duracao_min?.toString() || '30',
-  publico: false,
-  youtube_url: template?.youtube_url || '',
+  duracao_estimada: template?.duracao_estimada?.toString() || '45',
+  is_publico: false,
  });
- 
+
+ const [exercicios, setExercicios] = useState<Exercicio[]>([]);
+ const [exerciciosSelecionados, setExerciciosSelecionados] = useState<{exercicio: Exercicio, ordem: number, series?: number, repeticoes?: string, peso_sugerido?: number, tempo_descanso?: number}[]>([]);
+ const [busca, setBusca] = useState('');
  const [loading, setLoading] = useState(false);
 
  const NIVEIS = [
@@ -46,63 +50,138 @@ export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation,
   { id: 'avancado', label: 'Avançado', icon: '🔴', color: colors.semantic.error },
  ];
 
- const CATEGORIAS = [
-  { id: 'personalizado', label: 'Personalizado', icon: 'settings' },
-  { id: 'cardio', label: 'Cardio', icon: 'heart' },
-  { id: 'forca', label: 'Força', icon: '' },
-  { id: 'flexibilidade', label: 'Flexibilidade', icon: '🤸' },
-  { id: 'equilibrio', label: 'Equilíbrio', icon: 'balance' },
-  { id: 'funcional', label: 'Funcional', icon: '🏃' },
+ const OBJETIVOS = [
+  { id: 'hipertrofia', label: 'Hipertrofia', icon: '💪' },
+  { id: 'forca', label: 'Força', icon: '🏋️' },
+  { id: 'resistencia', label: 'Resistência', icon: '🏃' },
+  { id: 'reabilitacao', label: 'Reabilitação', icon: '🏥' },
+  { id: 'funcional', label: 'Funcional', icon: '⚡' },
  ];
 
+ // Carregar exercícios disponíveis
+ useEffect(() => {
+  carregarExercicios();
+ }, [busca]);
+
+ const carregarExercicios = async () => {
+  try {
+   const response = await exercicioService.buscarExercicios(
+    { search: busca },
+    1,
+    20
+   );
+   setExercicios(response.data || []);
+  } catch (error) {
+   console.error('Erro ao carregar exercícios:', error);
+  }
+ };
+
  const handleGoBack = useCallback(() => {
-  Haptics.selectionAsync();
-  navigation.goBack();
- }, [navigation]);
+  if (currentStep > 1) {
+   setCurrentStep(prev => prev - 1);
+  } else {
+   Haptics.selectionAsync();
+   navigation.goBack();
+  }
+ }, [currentStep, navigation]);
+
+ const handleNext = useCallback(() => {
+  if (currentStep < totalSteps) {
+   setCurrentStep(prev => prev + 1);
+   Haptics.selectionAsync();
+  }
+ }, [currentStep, totalSteps]);
+
+ const validateCurrentStep = () => {
+  switch (currentStep) {
+   case 1:
+    return formData.nome.trim() !== '' && formData.descricao.trim() !== '';
+   case 2:
+    return exerciciosSelecionados.length > 0;
+   case 3:
+    return true; // Configurações finais são opcionais
+   default:
+    return true;
+  }
+ };
 
  const updateFormData = useCallback((field: string, value: string | boolean) => {
   setFormData(prev => ({ ...prev, [field]: value }));
  }, []);
 
+ const adicionarExercicio = (exercicio: Exercicio) => {
+  if (exerciciosSelecionados.find(ex => ex.exercicio.id === exercicio.id)) {
+   Alert.alert('Aviso', 'Este exercício já foi adicionado ao treino');
+   return;
+  }
+
+  const novoExercicio = {
+   exercicio,
+   ordem: exerciciosSelecionados.length + 1,
+   series: 3,
+   repeticoes: '10-12',
+   peso_sugerido: 0,
+   tempo_descanso: 60
+  };
+
+  setExerciciosSelecionados(prev => [...prev, novoExercicio]);
+  setMostrarExercicios(false);
+  Haptics.selectionAsync();
+ };
+
+ const removerExercicio = (index: number) => {
+  setExerciciosSelecionados(prev => 
+   prev.filter((_, i) => i !== index)
+    .map((ex, i) => ({ ...ex, ordem: i + 1 }))
+  );
+  Haptics.selectionAsync();
+ };
+
+ const atualizarExercicio = (index: number, campo: string, valor: any) => {
+  setExerciciosSelecionados(prev => 
+   prev.map((ex, i) => 
+    i === index ? { ...ex, [campo]: valor } : ex
+   )
+  );
+ };
+
  const handleSubmit = useCallback(async () => {
-  if (!formData.exercicio.trim()) {
-   Alert.alert('Erro', 'Nome do exercício é obrigatório');
+  if (!formData.nome.trim()) {
+   Alert.alert('Erro', 'Nome do treino é obrigatório');
    return;
   }
 
-  if (!formData.series || parseInt(formData.series) < 1) {
-   Alert.alert('Erro', 'Número de séries deve ser maior que 0');
-   return;
-  }
-
-  if (!formData.repeticoes.trim()) {
-   Alert.alert('Erro', 'Repetições são obrigatórias');
+  if (exerciciosSelecionados.length === 0) {
+   Alert.alert('Erro', 'Adicione pelo menos um exercício ao treino');
    return;
   }
 
   try {
    setLoading(true);
-   const { data: { user } } = await supabase.auth.getUser();
-   if (!user) throw new Error('Usuário não autenticado');
 
-   const { error } = await supabase
-    .from('treinos')
-    .insert({
-     usuario_id: user.id,
-     exercicio: formData.exercicio.trim(),
-     descricao: formData.descricao.trim() || null,
-     series: parseInt(formData.series),
-     repeticoes: formData.repeticoes.trim() || '10',
-     nivel: formData.nivel,
-     categoria: formData.categoria,
-     duracao_min: parseInt(formData.duracao_min) || 30,
-     status: 'planned',
-     publico: formData.publico,
-     youtube_url: formData.youtube_url.trim() || null,
-     // criado_por removido - foreign key com problema
+   // Criar treino
+   const treinoData = {
+    nome: formData.nome.trim(),
+    descricao: formData.descricao.trim() || null,
+    objetivo: formData.objetivo,
+    nivel: formData.nivel,
+    duracao_estimada: parseInt(formData.duracao_estimada) || 45,
+    is_publico: formData.is_publico
+   };
+
+   const novoTreino = await treinoNovoService.criarTreino(treinoData);
+
+   // Adicionar exercícios ao treino
+   for (const ex of exerciciosSelecionados) {
+    await treinoNovoService.adicionarExercicioTreino(novoTreino.id, {
+     exercicio_id: ex.exercicio.id,
+     ordem: ex.ordem,
+     series: ex.series || 3,
+     repeticoes: ex.repeticoes || '10-12',
+     peso_sugerido: ex.peso_sugerido || 0,
+     tempo_descanso: ex.tempo_descanso || 60
     });
-
-   if (error) throw error;
+   }
 
    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
    Alert.alert(
@@ -121,7 +200,7 @@ export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation,
   } finally {
    setLoading(false);
   }
- }, [formData, navigation]);
+ }, [formData, exerciciosSelecionados, navigation]);
 
  const renderInput = (
   label: string,
@@ -260,31 +339,21 @@ export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation,
       marginBottom: spacing.xl,
      }}>
       <TouchableOpacity onPress={handleGoBack}>
-       <Text style={{ fontSize: 24, color: colors.text.primary }}>←</Text>
+       <Ionicons 
+        name={currentStep > 1 ? "chevron-back" : "close"} 
+        size={24} 
+        color={colors.text.primary} 
+       />
       </TouchableOpacity>
       
-      <Text style={typography.presets.screenTitle}>
-       {template ? ' Usar Template' : '➕ Criar Treino'}
+      <Text style={[
+       typography.presets.screenTitle,
+       { flex: 1, textAlign: 'center' }
+      ]}>
+       Criar Treino
       </Text>
       
-      <TouchableOpacity
-       onPress={handleSubmit}
-       disabled={loading}
-       style={{
-        backgroundColor: colors.accent.primary,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
-        borderRadius: borderRadius.md,
-        opacity: loading ? 0.6 : 1,
-       }}
-      >
-       <Text style={[
-        typography.presets.caption,
-        { color: colors.text.inverse, fontWeight: '600' }
-       ]}>
-        {loading ? 'Salvando...' : 'SALVAR'}
-       </Text>
-      </TouchableOpacity>
+      <View style={{ width: 24 }} />
      </View>
 
      {template && (
@@ -296,18 +365,18 @@ export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation,
        }}>
         <Ionicons name="information-circle-outline" size={20} color={colors.accent.tertiary} />
         <Text style={typography.presets.body}>
-         Usando template: <Text style={{ fontWeight: '600' }}>{template.exercicio}</Text>
+         Usando template: <Text style={{ fontWeight: '600' }}>{template.nome}</Text>
         </Text>
        </View>
       </Card>
      )}
 
      <Card variant="elevated" padding="lg">
-      {/* Nome do Exercício */}
+      {/* Nome do Treino */}
       {renderInput(
-       'Nome do Exercício *',
-       'exercicio',
-       'Ex: Flexão de braço, Agachamento...',
+       'Nome do Treino *',
+       'nome',
+       'Ex: Treino Peito e Tríceps, Upper Body...',
        { maxLength: 100 }
       )}
 
@@ -315,65 +384,25 @@ export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation,
       {renderInput(
        'Descrição',
        'descricao',
-       'Descreva como executar o exercício...',
+       'Descreva o objetivo e foco do treino...',
        { multiline: true, maxLength: 500 }
       )}
 
-      {/* Séries e Repetições */}
-      <View style={{
-       flexDirection: 'row',
-       gap: spacing.md,
-       marginBottom: spacing.lg,
-      }}>
-       <View style={{ flex: 1 }}>
-        {renderInput(
-         'Séries *',
-         'series',
-         '3',
-         { keyboardType: 'numeric' }
-        )}
-       </View>
-       
-       <View style={{ flex: 1 }}>
-        {renderInput(
-         'Repetições *',
-         'repeticoes',
-         '10-15',
-         { maxLength: 20 }
-        )}
-       </View>
-      </View>
-
-      {/* Duração e YouTube */}
-      <View style={{
-       flexDirection: 'row',
-       gap: spacing.md,
-       marginBottom: spacing.lg,
-      }}>
-       <View style={{ flex: 1 }}>
-        {renderInput(
-         'Duração (min)',
-         'duracao_min',
-         '30',
-         { keyboardType: 'numeric' }
-        )}
-       </View>
-      </View>
-
+      {/* Duração Estimada */}
       {renderInput(
-       'YouTube URL',
-       'youtube_url',
-       'https://youtube.com/watch?v=...',
-       { keyboardType: 'url' }
+       'Duração Estimada (min)',
+       'duracao_estimada',
+       '45',
+       { keyboardType: 'numeric' }
       )}
+
+      {/* Objetivo */}
+      {renderSelector('Objetivo', 'objetivo', OBJETIVOS)}
 
       {/* Nível */}
       {renderSelector('Nível de Dificuldade', 'nivel', NIVEIS)}
 
-      {/* Categoria */}
-      {renderSelector('Categoria', 'categoria', CATEGORIAS)}
-
-      {/* Público */}
+      {/* Visibilidade */}
       <View style={{ marginBottom: spacing.lg }}>
        <Text style={[
         typography.presets.body,
@@ -393,17 +422,17 @@ export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation,
         <TouchableOpacity
          onPress={() => {
           Haptics.selectionAsync();
-          updateFormData('publico', false);
+          updateFormData('is_publico', false);
          }}
          activeOpacity={0.8}
          style={{ flex: 1 }}
         >
          <View style={{
-          backgroundColor: !formData.publico 
+          backgroundColor: !formData.is_publico 
            ? colors.background.elevated 
            : colors.background.secondary,
           borderWidth: 2,
-          borderColor: !formData.publico 
+          borderColor: !formData.is_publico 
            ? colors.accent.primary
            : colors.surface.border,
           borderRadius: borderRadius.md,
@@ -415,16 +444,10 @@ export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation,
            typography.presets.body,
            { 
             fontWeight: '600',
-            color: !formData.publico ? colors.accent.primary : colors.text.primary
+            color: !formData.is_publico ? colors.accent.primary : colors.text.primary
            }
           ]}>
            Privado
-          </Text>
-          <Text style={[
-           typography.presets.caption,
-           { color: colors.text.secondary, textAlign: 'center' }
-          ]}>
-           Apenas você
           </Text>
          </View>
         </TouchableOpacity>
@@ -432,17 +455,17 @@ export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation,
         <TouchableOpacity
          onPress={() => {
           Haptics.selectionAsync();
-          updateFormData('publico', true);
+          updateFormData('is_publico', true);
          }}
          activeOpacity={0.8}
          style={{ flex: 1 }}
         >
          <View style={{
-          backgroundColor: formData.publico 
+          backgroundColor: formData.is_publico 
            ? colors.background.elevated 
            : colors.background.secondary,
           borderWidth: 2,
-          borderColor: formData.publico 
+          borderColor: formData.is_publico 
            ? colors.accent.primary
            : colors.surface.border,
           borderRadius: borderRadius.md,
@@ -454,30 +477,160 @@ export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation,
            typography.presets.body,
            { 
             fontWeight: '600',
-            color: formData.publico ? colors.accent.primary : colors.text.primary
+            color: formData.is_publico ? colors.accent.primary : colors.text.primary
            }
           ]}>
            Público
-          </Text>
-          <Text style={[
-           typography.presets.caption,
-           { color: colors.text.secondary, textAlign: 'center' }
-          ]}>
-           Na biblioteca
           </Text>
          </View>
         </TouchableOpacity>
        </View>
       </View>
+     </Card>
 
-      {/* Botão de Submissão */}
+     {/* Exercícios Selecionados */}
+     <Card variant="elevated" padding="lg" style={{ marginTop: spacing.lg }}>
+      <Text style={[
+       typography.presets.body,
+       { fontWeight: '600', marginBottom: spacing.md, color: colors.text.primary }
+      ]}>Exercícios do Treino ({exerciciosSelecionados.length})</Text>
+
+      {exerciciosSelecionados.map((item, index) => (
+       <View key={item.exercicio.id} style={{
+        backgroundColor: colors.background.secondary,
+        borderRadius: borderRadius.md,
+        padding: spacing.md,
+        marginBottom: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.surface.border
+       }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+         <Text style={[typography.presets.body, { fontWeight: '600', color: colors.text.primary, flex: 1 }]}>
+          {item.ordem}. {item.exercicio.nome}
+         </Text>
+         <TouchableOpacity onPress={() => removerExercicio(index)}>
+          <Ionicons name="trash-outline" size={20} color={colors.semantic.error} />
+         </TouchableOpacity>
+        </View>
+        
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+         <View style={{ flex: 1 }}>
+          <Text style={[typography.presets.caption, { color: colors.text.secondary, marginBottom: spacing.xs }]}>Séries</Text>
+          <TextInput
+           style={{
+            backgroundColor: colors.background.primary,
+            borderRadius: borderRadius.sm,
+            padding: spacing.sm,
+            color: colors.text.primary,
+            textAlign: 'center'
+           }}
+           value={item.series?.toString() || '3'}
+           onChangeText={(text) => atualizarExercicio(index, 'series', parseInt(text) || 3)}
+           keyboardType="numeric"
+          />
+         </View>
+         
+         <View style={{ flex: 2 }}>
+          <Text style={[typography.presets.caption, { color: colors.text.secondary, marginBottom: spacing.xs }]}>Repetições</Text>
+          <TextInput
+           style={{
+            backgroundColor: colors.background.primary,
+            borderRadius: borderRadius.sm,
+            padding: spacing.sm,
+            color: colors.text.primary,
+            textAlign: 'center'
+           }}
+           value={item.repeticoes || '10-12'}
+           onChangeText={(text) => atualizarExercicio(index, 'repeticoes', text)}
+          />
+         </View>
+         
+         <View style={{ flex: 1 }}>
+          <Text style={[typography.presets.caption, { color: colors.text.secondary, marginBottom: spacing.xs }]}>Descanso (s)</Text>
+          <TextInput
+           style={{
+            backgroundColor: colors.background.primary,
+            borderRadius: borderRadius.sm,
+            padding: spacing.sm,
+            color: colors.text.primary,
+            textAlign: 'center'
+           }}
+           value={item.tempo_descanso?.toString() || '60'}
+           onChangeText={(text) => atualizarExercicio(index, 'tempo_descanso', parseInt(text) || 60)}
+           keyboardType="numeric"
+          />
+         </View>
+        </View>
+       </View>
+      ))}
+
+      <Button
+       title="+ Adicionar Exercício"
+       onPress={() => setMostrarExercicios(true)}
+       variant="outline"
+       size="md"
+      />
+     </Card>
+
+     {/* Modal de Seleção de Exercícios */}
+     {mostrarExercicios && (
+      <Card variant="elevated" padding="lg" style={{ marginTop: spacing.lg }}>
+       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+        <Text style={[typography.presets.body, { fontWeight: '600', color: colors.text.primary }]}>Selecionar Exercício</Text>
+        <TouchableOpacity onPress={() => setMostrarExercicios(false)}>
+         <Ionicons name="close" size={24} color={colors.text.primary} />
+        </TouchableOpacity>
+       </View>
+       
+       <TextInput
+        style={{
+         backgroundColor: colors.background.secondary,
+         borderRadius: borderRadius.md,
+         padding: spacing.md,
+         marginBottom: spacing.md,
+         color: colors.text.primary
+        }}
+        placeholder="Buscar exercícios..."
+        placeholderTextColor={colors.text.tertiary}
+        value={busca}
+        onChangeText={setBusca}
+       />
+       
+       <FlatList
+        data={exercicios}
+        maxToRenderPerBatch={10}
+        style={{ maxHeight: 300 }}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+         <TouchableOpacity
+          onPress={() => adicionarExercicio(item)}
+          style={{
+           backgroundColor: colors.background.secondary,
+           borderRadius: borderRadius.sm,
+           padding: spacing.md,
+           marginBottom: spacing.xs,
+           borderWidth: 1,
+           borderColor: colors.surface.border
+          }}
+         >
+          <Text style={[typography.presets.body, { fontWeight: '600', color: colors.text.primary }]}>{item.nome}</Text>
+          <Text style={[typography.presets.caption, { color: colors.text.secondary }]}>
+           {item.grupo_muscular?.join(', ')} • {item.equipamento}
+          </Text>
+         </TouchableOpacity>
+        )}
+       />
+      </Card>
+     )}
+
+     {/* Botão de Submissão */}
+     <Card variant="elevated" padding="lg" style={{ marginTop: spacing.lg }}>
       <Button
        title={loading ? 'Criando Treino...' : 'Criar Treino'}
        onPress={handleSubmit}
        variant="gradient"
        size="lg"
-       disabled={loading}
-       icon={<Text style={{ fontSize: 16 }}>{loading ? '' : ''}</Text>}
+       disabled={loading || exerciciosSelecionados.length === 0}
       />
      </Card>
 

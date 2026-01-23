@@ -9,49 +9,39 @@ interface SignUpData {
 }
 
 export const authService = {
- async signUp(emailOrData: string | SignUpData, senha?: string, nome?: string, tipo?: 'aluno' | 'personal_trainer') {
-  let signUpData: SignUpData;
-  
-  if (typeof emailOrData === 'string') {
-   signUpData = {
-    email: emailOrData,
-    password: senha!,
-    name: nome!,
-    tipo: tipo!
-   };
-  } else {
-   signUpData = emailOrData;
-  }
+ async signUp(email: string, password: string, name: string, tipo: 'aluno' | 'personal_trainer') {
   try {
+   console.log('Tentando criar usuário:', { email, name, tipo })
+   
    const { data: authData, error: authError } = await supabase.auth.signUp({
-    email: signUpData.email,
-    password: signUpData.password,
+    email: email,
+    password: password,
     options: {
      data: {
-      name: signUpData.name,
-      tipo: signUpData.tipo
+      name: name,
+      tipo: tipo
      }
     }
    })
 
-   if (authError) throw authError
+   console.log('Resposta do auth:', { authData, authError })
+
+   if (authError) {
+    console.error('Erro de autenticação:', authError)
+    throw authError
+   }
 
    if (authData.user) {
-    const { data: profileData, error: profileError } = await supabase
-     .from('user_profiles')
-     .insert([
-      {
-       user_id: authData.user.id,
-       nome: signUpData.name,
-       email: signUpData.email,
-       tipo: signUpData.tipo
-      }
-     ])
-     .select()
-     .single()
+    const profileData = {
+     id: authData.user.id,
+     nome: name,
+     email: email,
+     tipo: tipo,
+     plano: 'trial',
+     created_at: new Date().toISOString()
+    }
 
-    if (profileError) throw profileError
-
+    console.log('Usuário criado com sucesso:', profileData)
     return { user: authData.user, profile: profileData }
    }
 
@@ -72,11 +62,15 @@ export const authService = {
    if (error) throw error
 
    if (data.user) {
-    const { data: profile } = await supabase
-     .from('user_profiles')
-     .select('*')
-     .eq('user_id', data.user.id)
-     .single()
+    // Criar perfil com dados do Auth
+    const profile = {
+     id: data.user.id,
+     nome: data.user.user_metadata?.name || 'Usuário',
+     email: data.user.email,
+     tipo: data.user.user_metadata?.tipo || 'aluno',
+     plano: 'trial',
+     created_at: data.user.created_at
+    }
 
     return { user: data.user, profile }
    }
@@ -110,14 +104,15 @@ export const authService = {
   const user = await this.getCurrentUser()
   if (!user) return null
 
-  const { data, error } = await supabase
-   .from('user_profiles')
-   .select('*')
-   .eq('user_id', user.id)
-   .single()
-
-  if (error) throw error
-  return data
+  // Retornar dados do Auth sem buscar na tabela
+  return {
+   id: user.id,
+   nome: user.user_metadata?.name || 'Usuário',
+   email: user.email!,
+   tipo: user.user_metadata?.tipo || 'aluno',
+   plano: 'trial',
+   created_at: user.created_at
+  }
  },
 
  async resetPassword(email: string) {

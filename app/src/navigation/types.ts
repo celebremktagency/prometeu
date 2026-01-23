@@ -53,4 +53,8 @@ export type RootStackParamList = {
   client: any
  }
  ConnectPersonal: undefined
+ TrainerWorkspace: undefined
+ CreateExercise: undefined
+ ProgramLibrary: undefined
+ ExerciseLibrary: undefined
 }

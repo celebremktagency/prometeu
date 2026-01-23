@@ -16,7 +16,8 @@ import {
  Icon,
 } from '../design-system';
 import { authService } from '../services/authService';
-import { treinoService } from '../services/treinoService';
+import { execucaoService } from '../services/execucaoService';
+import { treinoNovoService } from '../services/treinoNovoService';
 import { professionalService } from '../services/professionalService';
 import { inviteService } from '../services/inviteService';
 
@@ -70,9 +71,9 @@ export const ProfessionalDashboardScreen = memo<ProfessionalDashboardScreenProps
     setClients([]);
    }
 
-   // Carregar templates de treino
+   // Carregar templates de treino da nova estrutura
    try {
-    const templatesData = await treinoService.listarTreinos();
+    const { data: templatesData } = await treinoNovoService.buscarTreinos({ criado_por: userProfile.id }, 1, 100);
     setWorkoutTemplates(templatesData);
     setMetrics(prev => ({
      ...prev,
@@ -82,19 +83,59 @@ export const ProfessionalDashboardScreen = memo<ProfessionalDashboardScreenProps
     console.log('Nenhum template encontrado');
    }
 
-   // Simular atividade semanal baseada nos clientes ativos
-   const activity = Array(7).fill(false).map((_, index) => {
-    // Simula atividade baseada nos clientes (mais realista seria pegar dados reais)
-    return Math.random() > 0.4; // 60% chance de atividade
-   });
-   setWeeklyActivity(activity);
-
-   // Calcular clientes ativos na semana (simulação)
-   const weeklyActive = Math.floor(Math.random() * (metrics.activeClients || 1)) + 1;
-   setMetrics(prev => ({
-    ...prev,
-    weeklyActiveClients: weeklyActive,
-   }));
+   // Calcular atividade semanal real baseada nas execuções dos clientes
+   try {
+    const hoje = new Date();
+    const activity = [];
+    let totalClientesAtivosNaSemana = 0;
+    
+    // Para cada dia da semana (começando de domingo)
+    const inicioSemana = new Date(hoje);
+    inicioSemana.setDate(hoje.getDate() - hoje.getDay());
+    
+    for (let i = 0; i < 7; i++) {
+     const data = new Date(inicioSemana);
+     data.setDate(inicioSemana.getDate() + i);
+     const dataStr = data.toISOString().split('T')[0];
+     
+     // Verificar se algum cliente executou treino neste dia
+     let temAtividade = false;
+     const clientesAtivosNoDia = new Set();
+     
+     for (const cliente of clientsData) {
+      try {
+       const { data: execucoesCliente } = await execucaoService.buscarPorPeriodo(
+        cliente.id, 
+        dataStr + 'T00:00:00Z', 
+        dataStr + 'T23:59:59Z'
+       );
+       
+       if (execucoesCliente.length > 0) {
+        temAtividade = true;
+        clientesAtivosNoDia.add(cliente.id);
+       }
+      } catch (error) {
+       console.log(`Erro ao buscar execuções do cliente ${cliente.nome}`);
+      }
+     }
+     
+     activity.push(temAtividade);
+     if (i === 0) totalClientesAtivosNaSemana = clientesAtivosNoDia.size; // Última semana
+    }
+    
+    setWeeklyActivity(activity);
+    setMetrics(prev => ({
+     ...prev,
+     weeklyActiveClients: totalClientesAtivosNaSemana,
+    }));
+    
+    console.log('📊 Atividade semanal dos clientes:', activity);
+   } catch (error) {
+    console.log('Erro ao calcular atividade semanal:', error);
+    // Fallback: simular atividade
+    const activity = Array(7).fill(false).map(() => Math.random() > 0.5);
+    setWeeklyActivity(activity);
+   }
 
   } catch (error) {
    console.error('Erro ao carregar dashboard:', error);
@@ -366,22 +407,25 @@ export const ProfessionalDashboardScreen = memo<ProfessionalDashboardScreenProps
         Ações Rápidas
       </Text>
       
-      {/* Primeira linha */}
+      {/* Primeira linha - Workspace em destaque */}
+      <Button
+        title="🏗️ Workspace - Criar Exercícios, Treinos e Programas"
+        onPress={() => {
+          Haptics.selectionAsync();
+          navigation.navigate('TrainerWorkspace');
+        }}
+        variant="gradient"
+        size="lg"
+        fullWidth={true}
+        style={{ marginBottom: spacing.sm }}
+      />
+      
+      {/* Segunda linha */}
       <View style={{
        flexDirection: 'row',
        gap: spacing.sm,
        marginBottom: spacing.sm,
       }}>
-       <Button
-        title="Criar Treino"
-        onPress={handleCreateWorkout}
-        variant="gradient"
-        size="md"
-        fullWidth={true}
-        style={{ flex: 1 }}
-        icon={<Text style={{ fontSize: 16 }}>➕</Text>}
-       />
-       
        <Button
         title="Biblioteca"
         onPress={handleWorkoutLibrary}
@@ -390,6 +434,16 @@ export const ProfessionalDashboardScreen = memo<ProfessionalDashboardScreenProps
         fullWidth={true}
         style={{ flex: 1 }}
         icon={<Icon name="library" size={16} color={colors.accent.secondary} />}
+       />
+       
+       <Button
+        title="Criar Treino"
+        onPress={handleCreateWorkout}
+        variant="secondary"
+        size="md"
+        fullWidth={true}
+        style={{ flex: 1 }}
+        icon={<Text style={{ fontSize: 16 }}>➕</Text>}
        />
       </View>
 

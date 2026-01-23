@@ -28,6 +28,10 @@ import { MyCodeScreen } from '../screens/MyCodeScreen'
 import { ProfessionalCalendarScreen } from '../screens/ProfessionalCalendarScreen'
 import { ClientProgressScreen } from '../screens/ClientProgressScreen'
 import { ConnectPersonalScreen } from '../screens/ConnectPersonalScreen'
+import { TrainerWorkspaceScreen } from '../screens/TrainerWorkspaceScreen'
+import { CreateExerciseScreen } from '../screens/CreateExerciseScreen'
+import ProgramLibraryScreen from '../screens/ProgramLibraryScreen'
+import ExerciseLibraryScreen from '../screens/ExerciseLibraryScreen'
 import { authService } from '../services/authService'
 import { supabase } from '../services/supabaseClient'
 import { RootStackParamList } from './types'
@@ -134,6 +138,10 @@ export const AppNavigation = () => {
        <Stack.Screen name="ProfessionalCalendar" component={ProfessionalCalendarScreen} />
        <Stack.Screen name="ClientProgress" component={ClientProgressScreen} />
        <Stack.Screen name="ConnectPersonal" component={ConnectPersonalScreen} />
+       <Stack.Screen name="TrainerWorkspace" component={TrainerWorkspaceScreen} />
+       <Stack.Screen name="CreateExercise" component={CreateExerciseScreen} />
+       <Stack.Screen name="ProgramLibrary" component={ProgramLibraryScreen} />
+       <Stack.Screen name="ExerciseLibrary" component={ExerciseLibraryScreen} />
       </>
      ) : (
       <Stack.Screen name="Auth" component={AuthScreen} />

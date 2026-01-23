@@ -14,7 +14,7 @@ import {
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { authService } from '../services/authService';
 import { dorService } from '../services/dorService';
-import { treinoService } from '../services/treinoService';
+import { execucaoService } from '../services/execucaoService';
 
 interface ProgressScreenProps {
  navigation: any;
@@ -33,45 +33,35 @@ export const ProgressScreen = memo<ProgressScreenProps>(({ navigation }) => {
   try {
    setLoading(true);
    
-   // Carregar treinos
-   const treinos = await treinoService.listarTreinos();
-   const treinosCompletos = treinos.filter(t => t.status === 'completed');
+   const userProfile = await authService.getCurrentUserProfile();
    
-   // Calcular métricas gerais
-   setTotalWorkouts(treinosCompletos.length);
-   setTotalHours(treinosCompletos.length * 0.5); // 30min por treino
+   // NOVA ESTRUTURA: Carregar execuções usando execucaoService
+   const { data: historicoCompleto } = await execucaoService.buscarHistoricoUsuario(userProfile.id, 1, 100);
+   const estatisticas = await execucaoService.obterEstatisticas(userProfile.id);
    
-   // Calcular streak (sequência de dias consecutivos)
-   const hoje = new Date();
-   let streak = 0;
-   let currentDate = new Date(hoje);
-   
-   while (true) {
-    const dateStr = currentDate.toDateString();
-    const treinoNoDia = treinosCompletos.some(t => 
-     new Date(t.data_execucao || t.data_criacao).toDateString() === dateStr
-    );
-    if (treinoNoDia) {
-     streak++;
-     currentDate.setDate(currentDate.getDate() - 1);
-    } else {
-     break;
-    }
-   }
-   setStreakDays(streak);
+   // Usar estatísticas calculadas pelo serviço
+   setTotalWorkouts(estatisticas.treinosConcluidos);
+   setTotalHours(Math.round((estatisticas.totalMinutos / 60) * 10) / 10);
+   setStreakDays(estatisticas.streakAtual);
    
    // Calcular dados semanais de treinos (últimos 7 dias)
    const weeklyWorkouts = [0, 0, 0, 0, 0, 0, 0];
-   for (let i = 0; i < 7; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
-    const dateStr = date.toDateString();
-    const treinosNoDia = treinosCompletos.filter(t => 
-     new Date(t.data_execucao || t.data_criacao).toDateString() === dateStr
-    ).length;
-    weeklyWorkouts[i] = treinosNoDia;
+   if (historicoCompleto && historicoCompleto.length > 0) {
+    for (let i = 0; i < 7; i++) {
+     const date = new Date();
+     date.setDate(date.getDate() - (6 - i));
+     const dateStr = date.toDateString();
+     const treinosNoDia = historicoCompleto.filter(t => 
+      t.status === 'concluido' && t.data_execucao &&
+      new Date(t.data_execucao).toDateString() === dateStr
+     ).length;
+     weeklyWorkouts[i] = treinosNoDia;
+    }
    }
    setWeeklyWorkoutData(weeklyWorkouts);
+   
+   console.log('📊 Progresso carregado (NOVA ESTRUTURA):', estatisticas);
+   console.log('📈 Dados semanais:', weeklyWorkouts);
    
    // Carregar dados de dor
    try {

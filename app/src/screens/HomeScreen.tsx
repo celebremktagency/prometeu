@@ -18,7 +18,8 @@ import {
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { authService } from '../services/authService';
 import { dorService } from '../services/dorService';
-import { treinoService } from '../services/treinoService';
+import { execucaoService } from '../services/execucaoService';
+import { treinoNovoService } from '../services/treinoNovoService';
 import { trainerClientService } from '../services/trainerClientService';
 import { insightsService } from '../services/insightsService';
 import { communityService } from '../services/communityService';
@@ -115,8 +116,8 @@ export const HomeScreen = memo<HomeScreenProps>(({ navigation }) => {
      const { data: bibliotecaTreinos, error: bibliotecaError } = await supabase
       .from('treinos')
       .select('*')
-      .eq('publico', true)
-      .order('data_criacao', { ascending: false });
+      .eq('is_publico', true)
+      .order('created_at', { ascending: false });
      
      if (!bibliotecaError && bibliotecaTreinos) {
       const treinosFiltrados = bibliotecaTreinos.slice(0, 10);
@@ -130,53 +131,28 @@ export const HomeScreen = memo<HomeScreenProps>(({ navigation }) => {
     
     // Para métricas, buscar execuções reais de treino do usuário
     try {
-     const { data: execucoes, error: execError } = await supabase
-      .from('execucoes_treino')
-      .select('*')
-      .eq('cliente_id', userProfile.id)
-      .eq('finalizado', true);
+     const { data: historicoCompleto } = await execucaoService.buscarHistoricoUsuario(userProfile.id, 1, 100);
+     const estatisticas = await execucaoService.obterEstatisticas(userProfile.id);
+     const execucoes = historicoCompleto; // Compatibilidade
      
-     if (!execError && execucoes) {
+     if (execucoes && execucoes.length > 0) {
       const execucoesEstaSemana = execucoes.filter(exec => {
-       if (exec.status !== 'completed' || !exec.data_execucao) return false;
+       if (exec.status !== 'concluido' || !exec.data_execucao) return false;
        const execDate = new Date(exec.data_execucao);
        const oneWeekAgo = new Date();
        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
        return execDate > oneWeekAgo;
       });
       
-      // Calcular horas ativas baseado nas execuções completas
-      const horasAtivas = execucoesEstaSemana.reduce((total, exec) => total + (exec.tempo_total_min || 0), 0) / 60;
-      
+      // Usar estatísticas calculadas pelo novo serviço (mais preciso)
       setMetrics(prev => ({ 
        ...prev, 
-       workouts: execucoesEstaSemana.length,
-       activeHours: Math.round(horasAtivas * 10) / 10 // Arredondar para 1 casa decimal
+       workouts: estatisticas.treinosConcluidos,
+       activeHours: Math.round((estatisticas.totalMinutos / 60) * 10) / 10
       }));
       
-      // Calcular streak baseado em execuções reais
-      const hoje = new Date();
-      let streak = 0;
-      let currentDate = new Date(hoje);
-      
-      while (true) {
-       const dateStr = currentDate.toDateString();
-       const execucaoNoDia = execucoes.some(exec => 
-        new Date(exec.data_execucao).toDateString() === dateStr
-       );
-       
-       if (execucaoNoDia) {
-        streak++;
-        currentDate.setDate(currentDate.getDate() - 1);
-       } else if (streak === 0 && currentDate.toDateString() === hoje.toDateString()) {
-        // Se hoje não tem execução, começar de ontem
-        currentDate.setDate(currentDate.getDate() - 1);
-       } else {
-        break;
-       }
-      }
-      
-      setStreakDays(streak);
+      // Usar streak calculado pelo novo serviço (mais preciso)
+      setStreakDays(estatisticas.streakAtual);
       
       // Calcular calendário semanal baseado em execuções reais (últimos 7 dias)
       const weeklyData = [];
@@ -190,13 +166,14 @@ export const HomeScreen = memo<HomeScreenProps>(({ navigation }) => {
        date.setDate(inicioSemana.getDate() + i);
        const dateStr = date.toDateString();
        const temExecucao = execucoes.some(exec => 
-        exec.status === 'completed' && exec.data_execucao &&
+        exec.status === 'concluido' && exec.data_execucao &&
         new Date(exec.data_execucao).toDateString() === dateStr
        );
        weeklyData.push(temExecucao);
       }
       setWeeklyWorkouts(weeklyData);
-      console.log(' Dados do calendário semanal:', weeklyData);
+      console.log('🗓️ Dados do calendário semanal (NOVA ESTRUTURA):', weeklyData);
+      console.log('📊 Estatísticas carregadas:', estatisticas);
      }
     } catch (error) {
      console.log('Erro ao carregar histórico de execuções:', error);
@@ -744,6 +721,72 @@ export const HomeScreen = memo<HomeScreenProps>(({ navigation }) => {
        icon={<Ionicons name="person-outline" size={16} color={colors.text.primary} />}
       />
      </View>
+
+     {/* DEBUG: Botões para testar nova estrutura */}
+     {__DEV__ && (
+      <View style={{ marginBottom: spacing.lg }}>
+       <Text style={[typography.presets.sectionTitle, { marginBottom: spacing.sm }]}>
+        🔧 Debug - Nova Estrutura
+       </Text>
+       <View style={{ gap: spacing.sm }}>
+        <Button
+         title="📊 Criar Execuções Demo (Nova Estrutura)"
+         onPress={async () => {
+          try {
+           // Criar algumas execuções de exemplo na nova estrutura
+           const hoje = new Date();
+           for (let i = 0; i < 5; i++) {
+            const dataExecucao = new Date(hoje);
+            dataExecucao.setDate(hoje.getDate() - i);
+            
+            const execucao = await execucaoService.iniciarExecucao('treino-exemplo-id');
+            if (execucao.success) {
+             await execucaoService.finalizarExecucao(
+              execucao.data.id,
+              25 + Math.floor(Math.random() * 20), // 25-45 min
+              Math.floor(Math.random() * 2) + 4,   // 4-5 estrelas
+              `Treino demo ${i + 1} concluído!`
+             );
+            }
+           }
+           Alert.alert('Sucesso!', 'Execuções demo criadas na nova estrutura. Recarregue para ver.');
+          } catch (error: any) {
+           Alert.alert('Erro', error.message || 'Erro ao criar dados demo');
+          }
+         }}
+         variant="secondary"
+         size="sm"
+         fullWidth
+        />
+        
+        <Button
+         title="🔍 Verificar Dados do BD"
+         onPress={async () => {
+          try {
+           const estatisticas = await execucaoService.obterEstatisticas(user.id);
+           const { data: historico } = await execucaoService.buscarHistoricoUsuario(user.id, 1, 10);
+           
+           console.log('📊 Estatísticas:', estatisticas);
+           console.log('📈 Histórico:', historico);
+           
+           Alert.alert('Debug', 
+            `Treinos: ${estatisticas.treinosConcluidos}\n` +
+            `Tempo: ${estatisticas.totalMinutos}min\n` +
+            `Streak: ${estatisticas.streakAtual}\n` +
+            `Histórico: ${historico?.length || 0} registros\n` +
+            'Ver console para detalhes'
+           );
+          } catch (error: any) {
+           Alert.alert('Erro Debug', error.message);
+          }
+         }}
+         variant="ghost"
+         size="sm"
+         fullWidth
+        />
+       </View>
+      </View>
+     )}
 
      {/* Área do Profissional */}
      <View style={{ marginBottom: spacing.xl }}>

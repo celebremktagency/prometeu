@@ -41,23 +41,34 @@ export const ProfileScreen = memo<ProfileScreenProps>(({ navigation }) => {
    const userProfile = await authService.getCurrentUserProfile();
    setUser(userProfile);
    
-   // Carregar dados de treinos
-   const treinos = await treinoService.listarTreinos();
-   const treinosCompletos = treinos.filter(t => t.status === 'completed');
-   
-   setTotalWorkouts(treinosCompletos.length);
-   setTotalHours(treinosCompletos.length * 0.5); // 30min por treino
-   
-   // Calcular treinos desta semana
-   const hoje = new Date();
-   const inicioSemana = new Date(hoje);
-   inicioSemana.setDate(hoje.getDate() - hoje.getDay()); // Domingo
-   
-   const treinosEstaSemana = treinosCompletos.filter(t => {
-    const dataExecutacao = new Date(t.data_execucao || t.data_criacao);
-    return dataExecutacao >= inicioSemana;
-   });
-   setWeeklyWorkouts(treinosEstaSemana.length);
+   // Carregar estatísticas usando o novo serviço
+   try {
+     const estatisticas = await execucaoService.obterEstatisticas(userProfile.id);
+     
+     setTotalWorkouts(estatisticas.treinosConcluidos);
+     setTotalHours(Math.round(estatisticas.totalMinutos / 60 * 10) / 10); // Converter minutos para horas
+     
+     // Calcular treinos desta semana usando histórico de execuções
+     const { data: historico } = await execucaoService.buscarHistoricoUsuario(userProfile.id, 1, 100);
+     const hoje = new Date();
+     const inicioSemana = new Date(hoje);
+     inicioSemana.setDate(hoje.getDate() - hoje.getDay()); // Domingo
+     
+     const treinosEstaSemana = historico?.filter(exec => {
+       if (exec.status !== 'concluido') return false;
+       const dataExecucao = new Date(exec.data_execucao);
+       return dataExecucao >= inicioSemana;
+     }) || [];
+     
+     setWeeklyWorkouts(treinosEstaSemana.length);
+   } catch (error) {
+     console.log('Usando dados fallback para perfil')
+     // Fallback usando dados antigos se novo serviço falhar
+     const treinos = await treinoService.listarTreinos();
+     setTotalWorkouts(treinos.length);
+     setTotalHours(treinos.length * 0.5);
+     setWeeklyWorkouts(0);
+   }
    
    // Obter streak dos treinos usando o streakService
    try {
