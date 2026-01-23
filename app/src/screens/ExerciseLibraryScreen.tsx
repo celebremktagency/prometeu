@@ -1,407 +1,420 @@
 import React, { memo, useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
+import { 
+ View, 
+ Text, 
+ FlatList, 
+ TouchableOpacity, 
+ Alert,
+ RefreshControl,
+ TextInput 
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import {
-  colors,
-  typography,
-  spacing,
-  borderRadius,
-  Button,
-  Card,
-  MetricCard,
-  Icon,
-  SearchInput,
+ colors,
+ typography,
+ spacing,
+ borderRadius,
+ Button,
+ Card,
+ MetricCard,
+ Icon,
 } from '../design-system';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { exercicioService } from '../services/exercicioService';
+import { authService } from '../services/authService';
 import { Exercicio } from '../types';
 
 interface ExerciseLibraryScreenProps {
-  navigation: any;
+ navigation: any;
 }
 
 export const ExerciseLibraryScreen = memo<ExerciseLibraryScreenProps>(({ navigation }) => {
-  const [exercises, setExercises] = useState<Exercicio[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+ const [exercises, setExercises] = useState<Exercicio[]>([]);
+ const [loading, setLoading] = useState(true);
+ const [refreshing, setRefreshing] = useState(false);
+ const [searchText, setSearchText] = useState('');
+ const [filter, setFilter] = useState<string>('todos');
+ const [user, setUser] = useState<any>(null);
 
-  const MUSCLE_GROUPS = [
-    { id: 'peito', label: 'Peito', icon: '💪', color: colors.accent.primary },
-    { id: 'costas', label: 'Costas', icon: '🏋️', color: colors.accent.secondary },
-    { id: 'pernas', label: 'Pernas', icon: '🦵', color: colors.semantic.warning },
-    { id: 'ombros', label: 'Ombros', icon: '💪', color: colors.semantic.error },
-    { id: 'braços', label: 'Braços', icon: '💪', color: colors.accent.tertiary },
-    { id: 'abdomen', label: 'Abdome', icon: '🟡', color: colors.semantic.info },
-  ];
+ const FILTERS = [
+  { id: 'todos', label: 'Todos', icon: '📋' },
+  { id: 'peito', label: 'Peito', icon: '💪' },
+  { id: 'costas', label: 'Costas', icon: '🏋️' },
+  { id: 'pernas', label: 'Pernas', icon: '🦵' },
+  { id: 'ombros', label: 'Ombros', icon: '💪' },
+  { id: 'braços', label: 'Braços', icon: '💪' },
+  { id: 'abdomen', label: 'Abdome', icon: '🟡' },
+ ];
 
-  const loadExercises = useCallback(async () => {
-    try {
-      setLoading(true);
+ const loadExercises = useCallback(async () => {
+  try {
+   setLoading(true);
+   
+   const userProfile = await authService.getCurrentUserProfile();
+   setUser(userProfile);
+   
+   const filtros: any = {
+    search: searchText || undefined,
+   };
+   
+   if (filter !== 'todos') {
+    filtros.grupo_muscular = [filter];
+   }
+   
+   const response = await exercicioService.buscarExercicios(filtros, 1, 100);
+   
+   if (!response || !response.data) {
+    console.error('Erro ao carregar exercícios: resposta inválida');
+    Alert.alert('Erro', 'Não foi possível carregar os exercícios');
+    return;
+   }
+   
+   setExercises(response.data);
+  } catch (error: any) {
+   console.error('Erro ao carregar exercícios:', error);
+   Alert.alert('Erro', error.message || 'Erro desconhecido');
+  } finally {
+   setLoading(false);
+  }
+ }, [searchText, filter]);
+
+ const handleRefresh = useCallback(async () => {
+  setRefreshing(true);
+  await loadExercises();
+  setRefreshing(false);
+ }, [loadExercises]);
+
+ useEffect(() => {
+  loadExercises();
+ }, [loadExercises, filter]);
+
+ const handleGoBack = useCallback(() => {
+  Haptics.selectionAsync();
+  navigation.goBack();
+ }, [navigation]);
+
+ const handleCreateExercise = useCallback(() => {
+  Haptics.selectionAsync();
+  navigation.navigate('CreateExercise');
+ }, [navigation]);
+
+ const handleExercisePress = useCallback((exercise: Exercicio) => {
+  Haptics.selectionAsync();
+  navigation.navigate('ExerciseDetail', { exercise });
+ }, [navigation]);
+
+ const getDifficultyColor = (difficulty: string) => {
+  switch (difficulty) {
+   case 'iniciante': return colors.accent.secondary;
+   case 'intermediario': return colors.semantic.warning;
+   case 'avancado': return colors.semantic.error;
+   default: return colors.accent.primary;
+  }
+ };
+
+ // Filtrar exercícios
+ const filteredExercises = exercises.filter(exercise => {
+  const matchesSearch = exercise.nome.toLowerCase().includes(searchText.toLowerCase()) ||
+                       (exercise.descricao?.toLowerCase().includes(searchText.toLowerCase()));
+  
+  if (!matchesSearch) return false;
+  
+  if (filter === 'todos') return true;
+  
+  return exercise.grupo_muscular?.includes(filter);
+ });
+
+ const stats = {
+  total: exercises.length,
+  iniciante: exercises.filter(e => e.dificuldade === 'iniciante').length,
+  intermediario: exercises.filter(e => e.dificuldade === 'intermediario').length,
+  avancado: exercises.filter(e => e.dificuldade === 'avancado').length,
+ };
+
+ const renderExerciseItem = ({ item }: { item: Exercicio }) => (
+  <TouchableOpacity
+   onPress={() => handleExercisePress(item)}
+   activeOpacity={0.8}
+  >
+   <Card variant="elevated" padding="md" style={{ marginBottom: spacing.sm }}>
+    <View style={{
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'flex-start',
+     marginBottom: spacing.sm,
+    }}>
+     <View style={{ flex: 1 }}>
+      <Text style={[typography.presets.cardTitle, { marginBottom: spacing.xxs }]}>
+       {item.nome}
+      </Text>
+      {item.descricao && (
+       <Text style={[
+        typography.presets.body, 
+        { color: colors.text.secondary, marginBottom: spacing.xs }
+       ]} numberOfLines={2}>
+        {item.descricao}
+       </Text>
+      )}
+     </View>
+     
+     <View style={{
+      backgroundColor: getDifficultyColor(item.dificuldade),
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: borderRadius.sm,
+      marginLeft: spacing.sm,
+     }}>
+      <Text style={[
+       typography.presets.caption,
+       { color: colors.text.inverse, fontWeight: '600' }
+      ]}>
+       {item.dificuldade?.toUpperCase() || 'N/A'}
+      </Text>
+     </View>
+    </View>
+
+    <View style={{
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'center',
+     marginBottom: spacing.sm,
+    }}>
+     <View style={{ flexDirection: 'row', gap: spacing.lg }}>
+      <View style={{ alignItems: 'center' }}>
+       <Text style={[typography.presets.caption, { color: colors.text.tertiary }]}>
+        Nível
+       </Text>
+       <Text style={[typography.presets.body, { fontWeight: '600' }]}>
+        {item.dificuldade || 'N/A'}
+       </Text>
+      </View>
       
-      const filtros = {
-        search: searchQuery || undefined,
-        grupo_muscular: selectedGroup ? [selectedGroup] : undefined,
-      };
-      
-      const response = await exercicioService.buscarExercicios(filtros, 1, 100);
-      
-      if (response.data) {
-        setExercises(response.data);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar exercícios:', error);
-      Alert.alert('Erro', 'Não foi possível carregar os exercícios');
-    } finally {
-      setLoading(false);
-    }
-  }, [searchQuery, selectedGroup]);
+      <View style={{ alignItems: 'center' }}>
+       <Text style={[typography.presets.caption, { color: colors.text.tertiary }]}>
+        Equipamento
+       </Text>
+       <Text style={[typography.presets.body, { fontWeight: '600' }]}>
+        {item.equipamento || 'Peso corporal'}
+       </Text>
+      </View>
+     </View>
+    </View>
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadExercises();
-    setRefreshing(false);
-  }, [loadExercises]);
+    <View style={{
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: spacing.sm,
+    }}>
+     {item.grupo_muscular && item.grupo_muscular.length > 0 && (
+      <>
+       <Text style={typography.presets.caption}>
+        🎯 {item.grupo_muscular.slice(0, 2).join(', ')}
+        {item.grupo_muscular.length > 2 && ` +${item.grupo_muscular.length - 2}`}
+       </Text>
+       <View style={{
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: colors.text.tertiary,
+       }} />
+      </>
+     )}
+     <Text style={[typography.presets.caption, { color: colors.text.tertiary }]}>
+      Biblioteca pública
+     </Text>
+    </View>
+   </Card>
+  </TouchableOpacity>
+ );
 
-  useEffect(() => {
-    loadExercises();
-  }, [loadExercises]);
+ const renderHeader = () => (
+  <>
+   {/* Busca */}
+   <View style={{
+    backgroundColor: colors.background.secondary,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.surface.border,
+   }}>
+    <TextInput
+     placeholder="Buscar exercícios..."
+     placeholderTextColor={colors.text.tertiary}
+     value={searchText}
+     onChangeText={setSearchText}
+     style={{
+      fontSize: typography.sizes.md,
+      color: colors.text.primary,
+      padding: 0,
+     }}
+    />
+   </View>
 
-  const handleExercisePress = useCallback((exercise: Exercicio) => {
-    Haptics.selectionAsync();
-    navigation.navigate('ExerciseDetail', { exercise });
-  }, [navigation]);
+   {/* Estatísticas */}
+   <View style={{
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.lg,
+   }}>
+    <MetricCard
+     value={stats.total}
+     label="Total"
+     icon={<Icon name="fitness" size={16} color={colors.accent.primary} />}
+     accentColor={colors.accent.primary}
+     size="sm"
+     style={{ flex: 1, minWidth: '48%' }}
+    />
+    <MetricCard
+     value={stats.iniciante}
+     label="Iniciante"
+     icon={<Text style={{ fontSize: 10 }}>🟢</Text>}
+     accentColor={colors.accent.secondary}
+     size="sm"
+     style={{ flex: 1, minWidth: '48%' }}
+    />
+   </View>
 
-  const handleGoBack = useCallback(() => {
-    Haptics.selectionAsync();
-    navigation.goBack();
-  }, [navigation]);
-
-  const handleCreateExercise = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('CreateExercise');
-  }, [navigation]);
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'iniciante': return colors.accent.secondary;
-      case 'intermediario': return colors.semantic.warning;
-      case 'avancado': return colors.semantic.error;
-      default: return colors.text.secondary;
-    }
-  };
-
-  const getDifficultyIcon = (difficulty: string) => {
-    switch (difficulty) {
-      case 'iniciante': return '🟢';
-      case 'intermediario': return '🟡';
-      case 'avancado': return '🔴';
-      default: return '⚪';
-    }
-  };
-
-  const stats = {
-    total: exercises.length,
-    iniciante: exercises.filter(e => e.dificuldade === 'iniciante').length,
-    intermediario: exercises.filter(e => e.dificuldade === 'intermediario').length,
-    avancado: exercises.filter(e => e.dificuldade === 'avancado').length,
-  };
-
-  return (
-    <ScreenWrapper navigation={navigation} showTabBar={false}>
-      <LinearGradient
-        colors={[colors.background.primary, colors.background.secondary]}
-        style={{ flex: 1 }}
+   {/* Filtros */}
+   <View style={{ marginBottom: spacing.lg }}>
+    <Text style={[
+     typography.presets.body,
+     { 
+      color: colors.text.secondary,
+      marginBottom: spacing.sm 
+     }
+    ]}>
+     Filtrar por grupo muscular
+    </Text>
+    
+    <View style={{
+     flexDirection: 'row',
+     flexWrap: 'wrap',
+     gap: spacing.sm,
+    }}>
+     {FILTERS.map((filterItem) => (
+      <TouchableOpacity
+       key={filterItem.id}
+       onPress={() => {
+        Haptics.selectionAsync();
+        setFilter(filterItem.id);
+       }}
+       activeOpacity={0.8}
       >
-        {/* Header */}
-        <View style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          paddingHorizontal: spacing.screenHorizontal,
-          paddingVertical: spacing.screenVertical,
+       <View style={{
+        backgroundColor: filter === filterItem.id 
+         ? colors.background.elevated 
+         : colors.background.secondary,
+        borderWidth: 2,
+        borderColor: filter === filterItem.id 
+         ? colors.accent.primary 
+         : colors.surface.border,
+        borderRadius: borderRadius.md,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.xs,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+       }}>
+        <Text style={{ fontSize: 14 }}>
+         {filterItem.icon}
+        </Text>
+        <Text style={{
+         fontSize: typography.sizes.sm,
+         fontWeight: '600',
+         color: filter === filterItem.id 
+          ? colors.accent.primary 
+          : colors.text.primary,
         }}>
-          <TouchableOpacity onPress={handleGoBack}>
-            <Icon name="arrow-left" size={24} color={colors.text.primary} />
-          </TouchableOpacity>
-          
-          <Text style={typography.presets.screenTitle}>
-            Exercícios
-          </Text>
-          
-          <Button
-            title="Criar"
-            onPress={handleCreateExercise}
-            variant="gradient"
-            size="sm"
-            icon={<Icon name="plus" size={14} color={colors.text.inverse} />}
-          />
-        </View>
+         {filterItem.label}
+        </Text>
+       </View>
+      </TouchableOpacity>
+     ))}
+    </View>
+   </View>
 
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{
-            paddingHorizontal: spacing.screenHorizontal,
-            paddingBottom: spacing.screenVertical,
-          }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        >
-          {/* Search */}
-          <SearchInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Buscar exercícios..."
-            style={{ marginBottom: spacing.lg }}
-          />
+   {filteredExercises.length === 0 && !loading && (
+    <Card variant="glass" padding="lg" style={{ marginBottom: spacing.lg }}>
+     <View style={{ alignItems: 'center' }}>
+      <Text style={{ fontSize: 48, marginBottom: spacing.sm }}>💪</Text>
+      <Text style={[typography.presets.cardTitle, { textAlign: 'center', marginBottom: spacing.xs }]}>
+       Nenhum exercício encontrado
+      </Text>
+      <Text style={[typography.presets.body, { textAlign: 'center', marginBottom: spacing.md }]}>
+       {searchText 
+        ? 'Tente buscar por outro termo ou filtro'
+        : 'Navegue pelos filtros para encontrar exercícios'
+       }
+      </Text>
+      <Button
+       title="Criar Exercício"
+       onPress={handleCreateExercise}
+       variant="secondary"
+       size="sm"
+      />
+     </View>
+    </Card>
+   )}
+  </>
+ );
 
-          {/* Stats */}
-          <View style={{
-            flexDirection: 'row',
-            gap: spacing.xs,
-            marginBottom: spacing.lg,
-          }}>
-            <MetricCard
-              value={stats.total}
-              label="Total"
-              icon={<Icon name="fitness" size={14} color={colors.accent.primary} />}
-              accentColor={colors.accent.primary}
-              size="sm"
-              style={{ flex: 1 }}
-            />
-            <MetricCard
-              value={stats.iniciante}
-              label="Iniciante"
-              icon={<Text style={{ fontSize: 10 }}>🟢</Text>}
-              accentColor={colors.accent.secondary}
-              size="sm"
-              style={{ flex: 1 }}
-            />
-            <MetricCard
-              value={stats.intermediario}
-              label="Inter"
-              icon={<Text style={{ fontSize: 10 }}>🟡</Text>}
-              accentColor={colors.semantic.warning}
-              size="sm"
-              style={{ flex: 1 }}
-            />
-            <MetricCard
-              value={stats.avancado}
-              label="Avanç"
-              icon={<Text style={{ fontSize: 10 }}>🔴</Text>}
-              accentColor={colors.semantic.error}
-              size="sm"
-              style={{ flex: 1 }}
-            />
-          </View>
+ return (
+  <ScreenWrapper navigation={navigation}>
+   <LinearGradient
+    colors={[colors.background.primary, colors.background.secondary]}
+    style={{ flex: 1 }}
+   >
+    {/* Header */}
+    <View style={{
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'center',
+     paddingHorizontal: spacing.screenHorizontal,
+     paddingVertical: spacing.screenVertical,
+    }}>
+     <TouchableOpacity onPress={handleGoBack}>
+      <Text style={{ fontSize: 24, color: colors.text.primary }}>←</Text>
+     </TouchableOpacity>
+     
+     <Text style={typography.presets.screenTitle}>
+      Exercícios
+     </Text>
+     
+     <Button
+      title="Criar"
+      onPress={handleCreateExercise}
+      variant="gradient"
+      size="sm"
+      icon={<Text style={{ fontSize: 14 }}>➕</Text>}
+     />
+    </View>
 
-          {/* Group Filter */}
-          <View style={{ marginBottom: spacing.lg }}>
-            <Text style={[
-              typography.presets.body,
-              { fontWeight: '600', marginBottom: spacing.sm, color: colors.text.primary }
-            ]}>
-              Grupo Muscular
-            </Text>
-            
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setSelectedGroup(null);
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={{
-                  backgroundColor: !selectedGroup ? colors.background.elevated : colors.background.secondary,
-                  borderWidth: 2,
-                  borderColor: !selectedGroup ? colors.accent.primary : colors.surface.border,
-                  borderRadius: borderRadius.md,
-                  paddingHorizontal: spacing.sm,
-                  paddingVertical: spacing.xs,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: spacing.xs,
-                }}>
-                  <Text style={{ fontSize: 14 }}>📋</Text>
-                  <Text style={{
-                    fontSize: typography.sizes.xs,
-                    fontWeight: '600',
-                    color: !selectedGroup ? colors.accent.primary : colors.text.primary,
-                  }}>
-                    Todos
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              {MUSCLE_GROUPS.map((group) => (
-                <TouchableOpacity
-                  key={group.id}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setSelectedGroup(group.id === selectedGroup ? null : group.id);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <View style={{
-                    backgroundColor: selectedGroup === group.id ? colors.background.elevated : colors.background.secondary,
-                    borderWidth: 2,
-                    borderColor: selectedGroup === group.id ? group.color : colors.surface.border,
-                    borderRadius: borderRadius.md,
-                    paddingHorizontal: spacing.sm,
-                    paddingVertical: spacing.xs,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: spacing.xs,
-                  }}>
-                    <Text style={{ fontSize: 14 }}>{group.icon}</Text>
-                    <Text style={{
-                      fontSize: typography.sizes.xs,
-                      fontWeight: '600',
-                      color: selectedGroup === group.id ? group.color : colors.text.primary,
-                    }}>
-                      {group.label}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Exercise List */}
-          {loading ? (
-            <Card variant="elevated" padding="xl" style={{ alignItems: 'center' }}>
-              <Icon name="loading" size={32} color={colors.accent.primary} />
-              <Text style={[typography.presets.body, { marginTop: spacing.md, color: colors.text.secondary }]}>
-                Carregando exercícios...
-              </Text>
-            </Card>
-          ) : exercises.length === 0 ? (
-            <Card variant="glass" padding="xl" style={{ alignItems: 'center' }}>
-              <Text style={{ fontSize: 48, marginBottom: spacing.md }}>💪</Text>
-              <Text style={[typography.presets.cardTitle, { marginBottom: spacing.sm }]}>
-                Nenhum exercício encontrado
-              </Text>
-              <Text style={[typography.presets.body, { textAlign: 'center', color: colors.text.secondary, marginBottom: spacing.lg }]}>
-                {searchQuery || selectedGroup 
-                  ? 'Tente ajustar os filtros ou criar um novo exercício'
-                  : 'Comece criando seu primeiro exercício'
-                }
-              </Text>
-              
-              <Button
-                title="Criar Exercício"
-                onPress={handleCreateExercise}
-                variant="gradient"
-                size="md"
-                icon={<Icon name="plus" size={16} color={colors.text.inverse} />}
-              />
-            </Card>
-          ) : (
-            <View style={{ gap: spacing.md }}>
-              {exercises.map((exercise) => (
-                <TouchableOpacity
-                  key={exercise.id}
-                  onPress={() => handleExercisePress(exercise)}
-                  activeOpacity={0.8}
-                >
-                  <Card variant="elevated" padding="lg">
-                    <View style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      marginBottom: spacing.sm,
-                    }}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[typography.presets.cardTitle, { marginBottom: spacing.xs }]}>
-                          {exercise.nome}
-                        </Text>
-                        
-                        {exercise.grupo_muscular && exercise.grupo_muscular.length > 0 && (
-                          <View style={{
-                            flexDirection: 'row',
-                            flexWrap: 'wrap',
-                            gap: spacing.xs,
-                            marginBottom: spacing.sm,
-                          }}>
-                            {exercise.grupo_muscular.slice(0, 3).map((group, index) => (
-                              <View key={index} style={{
-                                backgroundColor: colors.surface.card,
-                                paddingHorizontal: spacing.xs,
-                                paddingVertical: 2,
-                                borderRadius: borderRadius.xs,
-                              }}>
-                                <Text style={[typography.presets.caption, { color: colors.accent.primary, fontSize: 10 }]}>
-                                  {group}
-                                </Text>
-                              </View>
-                            ))}
-                            {exercise.grupo_muscular.length > 3 && (
-                              <Text style={[typography.presets.caption, { color: colors.text.tertiary }]}>
-                                +{exercise.grupo_muscular.length - 3}
-                              </Text>
-                            )}
-                          </View>
-                        )}
-                      </View>
-                      
-                      <View style={{
-                        backgroundColor: getDifficultyColor(exercise.dificuldade),
-                        paddingHorizontal: spacing.sm,
-                        paddingVertical: spacing.xs,
-                        borderRadius: borderRadius.sm,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: spacing.xs,
-                      }}>
-                        <Text style={{ fontSize: 10 }}>
-                          {getDifficultyIcon(exercise.dificuldade)}
-                        </Text>
-                        <Text style={[
-                          typography.presets.caption,
-                          { color: colors.text.inverse, fontWeight: '600', fontSize: 10 }
-                        ]}>
-                          {exercise.dificuldade?.toUpperCase() || 'N/A'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {exercise.descricao && (
-                      <Text style={[
-                        typography.presets.body, 
-                        { lineHeight: 18, marginBottom: spacing.sm, color: colors.text.secondary }
-                      ]} numberOfLines={2}>
-                        {exercise.descricao}
-                      </Text>
-                    )}
-
-                    <View style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-                        <Icon name="tool" size={12} color={colors.text.tertiary} />
-                        <Text style={[typography.presets.caption, { color: colors.text.tertiary }]}>
-                          {exercise.equipamento || 'Peso corporal'}
-                        </Text>
-                      </View>
-                      
-                      <Icon name="chevron-right" size={16} color={colors.accent.primary} />
-                    </View>
-                  </Card>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </ScrollView>
-      </LinearGradient>
-    </ScreenWrapper>
-  );
+    <FlatList
+     data={filteredExercises}
+     keyExtractor={(item) => item.id}
+     renderItem={renderExerciseItem}
+     ListHeaderComponent={renderHeader}
+     contentContainerStyle={{
+      paddingHorizontal: spacing.screenHorizontal,
+      paddingBottom: spacing.screenVertical,
+     }}
+     showsVerticalScrollIndicator={false}
+     refreshControl={
+      <RefreshControl
+       refreshing={refreshing}
+       onRefresh={handleRefresh}
+       tintColor={colors.accent.primary}
+       colors={[colors.accent.primary]}
+      />
+     }
+    />
+   </LinearGradient>
+  </ScreenWrapper>
+ );
 });
 
 export default ExerciseLibraryScreen;
