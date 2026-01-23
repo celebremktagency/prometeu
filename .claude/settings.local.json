@@ -34,7 +34,8 @@
       "Bash(npx shadcn@latest add:*)",
       "Bash(grep:*)",
       "Bash(find:*)",
-      "Bash(git -C /Users/emersin7x/Documents/Prometeus status --porcelain)"
+      "Bash(git -C /Users/emersin7x/Documents/Prometeus status --porcelain)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

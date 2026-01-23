@@ -156,7 +156,10 @@ export const CreateExerciseScreen = memo<CreateExerciseScreenProps>(({ navigatio
         is_publico: true,
       };
 
-      await exercicioService.criarExercicio(exercicioData);
+      const response = await exercicioService.criar(exercicioData);
+      if (!response.success) {
+        throw new Error(response.error || 'Erro ao criar exercício');
+      }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert(

@@ -169,11 +169,14 @@ export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation,
     is_publico: formData.is_publico
    };
 
-   const novoTreino = await treinoNovoService.criarTreino(treinoData);
+   const response = await treinoNovoService.criar(treinoData);
+   if (!response.success || !response.data) {
+    throw new Error(response.error || 'Erro ao criar treino');
+   }
 
    // Adicionar exercícios ao treino
    for (const ex of exerciciosSelecionados) {
-    await treinoNovoService.adicionarExercicioTreino(novoTreino.id, {
+    await treinoNovoService.adicionarExercicio(response.data.id, {
      exercicio_id: ex.exercicio.id,
      ordem: ex.ordem,
      series: ex.series || 3,
