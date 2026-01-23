@@ -96,8 +96,9 @@ export const WorkoutLibraryScreen = memo<WorkoutLibraryScreenProps>(({ navigatio
    if (userProfile) {
     if (isAssignmentMode || filter === 'biblioteca') {
      // Show public workouts from library
+     filtros.is_publico = true;
     } else if (filter === 'meus') {
-     // Show only user's workouts
+     // Show only user's workouts - tanto públicos quanto privados criados pelo usuário
      filtros.criado_por = userProfile?.user_id || userProfile?.id;
     }
    }

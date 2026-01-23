@@ -1,181 +1,231 @@
-import React, { useState, useEffect } from 'react'
-import { View, Text, ScrollView } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { Button } from '../components/Button'
+import React, { memo, useState, useCallback } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
+import {
+  colors,
+  typography,
+  spacing,
+  borderRadius,
+  Button,
+  Card,
+  MetricCard,
+  Icon,
+  YouTubePreview,
+} from '../design-system';
+import { ScreenWrapper } from '../components/ScreenWrapper';
 
 interface ExerciseDetailScreenProps {
- navigation: any
- route: {
-  params: {
-   exercise: any
-  }
- }
+  navigation: any;
+  route: {
+    params: {
+      exercise: any;
+    };
+  };
 }
 
-export const ExerciseDetailScreen: React.FC<ExerciseDetailScreenProps> = ({ 
- navigation, 
- route 
-}) => {
- const { exercise } = route.params
+export const ExerciseDetailScreen = memo<ExerciseDetailScreenProps>(({ navigation, route }) => {
+  const { exercise } = route.params;
 
- return (
-  <SafeAreaView style={{ flex: 1, backgroundColor: 'white' }}>
-   <ScrollView style={{ flex: 1, padding: 20 }}>
-    <View style={{ 
-     flexDirection: 'row', 
-     justifyContent: 'space-between', 
-     alignItems: 'center',
-     marginBottom: 30 
-    }}>
-     <Text style={{ fontSize: 24, fontWeight: 'bold' }}>
-      {exercise.nome}
-     </Text>
-     <Button title="Voltar" variant="secondary" onPress={() => navigation.goBack()} />
-    </View>
+  const handleGoBack = useCallback(() => {
+    Haptics.selectionAsync();
+    navigation.goBack();
+  }, [navigation]);
 
-    {/* Informações do Exercício */}
-    <View style={{ marginBottom: 20 }}>
-     <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
-      Informações
-     </Text>
-     <View style={{ 
-      backgroundColor: '#f8f9fa', 
-      padding: 15, 
-      borderRadius: 10,
-      marginBottom: 15
-     }}>
-      <Text style={{ marginBottom: 5 }}>
-       <Text style={{ fontWeight: 'bold' }}>Grupo Muscular: </Text>
-       {exercise.grupo_muscular || 'Não especificado'}
-      </Text>
-      <Text style={{ marginBottom: 5 }}>
-       <Text style={{ fontWeight: 'bold' }}>Equipamento: </Text>
-       {exercise.equipamento || 'Não especificado'}
-      </Text>
-      <Text style={{ marginBottom: 5 }}>
-       <Text style={{ fontWeight: 'bold' }}>Nível: </Text>
-       {exercise.nivel || 'Não especificado'}
-      </Text>
-      <Text>
-       <Text style={{ fontWeight: 'bold' }}>Status: </Text>
-       {exercise.ativo ? 'Ativo' : 'Inativo'}
-      </Text>
-     </View>
-    </View>
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'iniciante': return colors.accent.secondary;
+      case 'intermediario': return colors.semantic.warning;
+      case 'avancado': return colors.semantic.error;
+      default: return colors.text.secondary;
+    }
+  };
 
-    {/* Descrição */}
-    {exercise.descricao && (
-     <View style={{ marginBottom: 20 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
-       Descrição
-      </Text>
-      <View style={{ 
-       backgroundColor: '#f0f8ff', 
-       padding: 15, 
-       borderRadius: 10,
-       borderWidth: 1,
-       borderColor: '#cce7ff'
-      }}>
-       <Text style={{ lineHeight: 20 }}>{exercise.descricao}</Text>
-      </View>
-     </View>
-    )}
+  const getDifficultyIcon = (difficulty: string) => {
+    switch (difficulty) {
+      case 'iniciante': return '🟢';
+      case 'intermediario': return '🟡';
+      case 'avancado': return '🔴';
+      default: return '⚪';
+    }
+  };
 
-    {/* Instruções */}
-    {exercise.instrucoes && (
-     <View style={{ marginBottom: 20 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
-       Como Executar
-      </Text>
-      <View style={{ 
-       backgroundColor: '#f0fff4', 
-       padding: 15, 
-       borderRadius: 10,
-       borderWidth: 1,
-       borderColor: '#b3f5cc'
-      }}>
-       <Text style={{ lineHeight: 20 }}>{exercise.instrucoes}</Text>
-      </View>
-     </View>
-    )}
+  return (
+    <ScreenWrapper navigation={navigation} showTabBar={false}>
+      <LinearGradient
+        colors={[colors.background.primary, colors.background.secondary]}
+        style={{ flex: 1 }}
+      >
+        {/* Header */}
+        <View style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingHorizontal: spacing.screenHorizontal,
+          paddingVertical: spacing.screenVertical,
+        }}>
+          <TouchableOpacity onPress={handleGoBack}>
+            <Icon name="arrow-left" size={24} color={colors.text.primary} />
+          </TouchableOpacity>
+          
+          <Text style={typography.presets.screenTitle}>
+            Exercício
+          </Text>
+          
+          <View style={{ width: 24 }} />
+        </View>
 
-    {/* Vídeo */}
-    {exercise.youtube_url && (
-     <View style={{ marginBottom: 20 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
-       📹 Vídeo Demonstrativo
-      </Text>
-      <View style={{ 
-       backgroundColor: '#fff5f5', 
-       padding: 15, 
-       borderRadius: 10,
-       borderWidth: 1,
-       borderColor: '#ffe0e0'
-      }}>
-       <Text style={{ color: '#0066cc', textDecorationLine: 'underline' }}>
-        {exercise.youtube_url}
-       </Text>
-       <Text style={{ color: '#666', marginTop: 5, fontSize: 12 }}>
-        Abra em um navegador para assistir
-       </Text>
-      </View>
-     </View>
-    )}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingHorizontal: spacing.screenHorizontal,
+            paddingBottom: spacing.screenVertical,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Main Info Card */}
+          <Card variant="elevated" padding="lg" style={{ marginBottom: spacing.lg }}>
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              marginBottom: spacing.sm,
+            }}>
+              <View style={{ flex: 1 }}>
+                <Text style={[typography.presets.cardTitle, { marginBottom: spacing.xs }]}>
+                  {exercise.nome}
+                </Text>
+                
+                {exercise.grupo_muscular && exercise.grupo_muscular.length > 0 && (
+                  <View style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    gap: spacing.xs,
+                    marginBottom: spacing.sm,
+                  }}>
+                    {exercise.grupo_muscular.map((group: string, index: number) => (
+                      <View key={index} style={{
+                        backgroundColor: colors.surface.card,
+                        paddingHorizontal: spacing.sm,
+                        paddingVertical: spacing.xs,
+                        borderRadius: borderRadius.sm,
+                      }}>
+                        <Text style={[typography.presets.caption, { color: colors.accent.primary }]}>
+                          {group}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+              
+              <View style={{
+                backgroundColor: getDifficultyColor(exercise.dificuldade),
+                paddingHorizontal: spacing.sm,
+                paddingVertical: spacing.xs,
+                borderRadius: borderRadius.sm,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.xs,
+              }}>
+                <Text style={{ fontSize: 12 }}>
+                  {getDifficultyIcon(exercise.dificuldade)}
+                </Text>
+                <Text style={[
+                  typography.presets.caption,
+                  { color: colors.text.inverse, fontWeight: '600' }
+                ]}>
+                  {exercise.dificuldade?.toUpperCase() || 'N/A'}
+                </Text>
+              </View>
+            </View>
 
-    {/* Músculos Trabalhados */}
-    {exercise.musculos_trabalhados && (
-     <View style={{ marginBottom: 20 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
-       Músculos Trabalhados
-      </Text>
-      <View style={{ 
-       backgroundColor: '#fefefe', 
-       padding: 15, 
-       borderRadius: 10,
-       borderWidth: 1,
-       borderColor: '#eee'
-      }}>
-       <Text>{exercise.musculos_trabalhados}</Text>
-      </View>
-     </View>
-    )}
+            {exercise.descricao && (
+              <View style={{
+                backgroundColor: colors.surface.card,
+                borderRadius: borderRadius.md,
+                padding: spacing.md,
+                marginBottom: spacing.sm,
+              }}>
+                <Text style={[typography.presets.body, { lineHeight: 20 }]}>
+                  {exercise.descricao}
+                </Text>
+              </View>
+            )}
 
-    {/* Variações */}
-    {exercise.variacoes && (
-     <View style={{ marginBottom: 20 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
-       Variações
-      </Text>
-      <View style={{ 
-       backgroundColor: '#f9f9f9', 
-       padding: 15, 
-       borderRadius: 10,
-       borderWidth: 1,
-       borderColor: '#ddd'
-      }}>
-       <Text>{exercise.variacoes}</Text>
-      </View>
-     </View>
-    )}
+            {/* Equipment */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.sm,
+              marginTop: spacing.sm,
+            }}>
+              <Icon name="tool" size={16} color={colors.text.primary} />
+              <Text style={[typography.presets.caption, { color: colors.text.tertiary }]}>
+                Equipamento: {exercise.equipamento || 'Peso corporal'}
+              </Text>
+            </View>
+          </Card>
 
-    {/* Cuidados */}
-    {exercise.cuidados && (
-     <View style={{ marginBottom: 20 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
-        Cuidados Importantes
-      </Text>
-      <View style={{ 
-       backgroundColor: '#fff8e1', 
-       padding: 15, 
-       borderRadius: 10,
-       borderWidth: 1,
-       borderColor: '#ffeb3b'
-      }}>
-       <Text style={{ color: '#e65100' }}>{exercise.cuidados}</Text>
-      </View>
-     </View>
-    )}
-   </ScrollView>
-  </SafeAreaView>
- )
-}
+          {/* Instructions */}
+          {exercise.instrucoes && (
+            <Card variant="elevated" padding="lg" style={{ marginBottom: spacing.lg }}>
+              <Text style={[typography.presets.sectionTitle, { marginBottom: spacing.md }]}>
+                Como Executar
+              </Text>
+              <Text style={[typography.presets.body, { lineHeight: 22 }]}>
+                {exercise.instrucoes}
+              </Text>
+            </Card>
+          )}
+
+          {/* Safety Tips */}
+          {exercise.dicas_seguranca && (
+            <Card variant="glass" padding="lg" style={{ marginBottom: spacing.lg }}>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.sm,
+                marginBottom: spacing.md,
+              }}>
+                <Icon name="warning" size={20} color={colors.semantic.warning} />
+                <Text style={[typography.presets.sectionTitle, { color: colors.semantic.warning }]}>
+                  Dicas de Segurança
+                </Text>
+              </View>
+              <Text style={[typography.presets.body, { lineHeight: 22 }]}>
+                {exercise.dicas_seguranca}
+              </Text>
+            </Card>
+          )}
+
+          {/* Video */}
+          {exercise.video_url && (
+            <YouTubePreview
+              url={exercise.video_url}
+              title="Vídeo Demonstrativo"
+              style={{ marginBottom: spacing.lg }}
+            />
+          )}
+
+          {/* Action Button */}
+          <Button
+            title="Adicionar ao Treino"
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              Alert.alert('Em breve', 'Funcionalidade em desenvolvimento');
+            }}
+            variant="gradient"
+            size="lg"
+            icon={<Icon name="plus" size={16} color={colors.text.inverse} />}
+          />
+
+          {/* Espaçamento final */}
+          <View style={{ height: spacing.xl }} />
+        </ScrollView>
+      </LinearGradient>
+    </ScreenWrapper>
+  );
+});
+
+export default ExerciseDetailScreen;

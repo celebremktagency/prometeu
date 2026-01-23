@@ -39,6 +39,10 @@ class TreinoNovoService {
         query = query.eq('criado_por', filtros.criado_por);
       }
 
+      if (filtros.is_publico !== undefined) {
+        query = query.eq('is_publico', filtros.is_publico);
+      }
+
       // Ordenar e paginar
       const { data, error, count } = await query
         .order('created_at', { ascending: false })
