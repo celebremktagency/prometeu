@@ -57,4 +57,5 @@ export type RootStackParamList = {
  CreateExercise: undefined
  ProgramLibrary: undefined
  ExerciseLibrary: undefined
+ CreateProgram: undefined
 }

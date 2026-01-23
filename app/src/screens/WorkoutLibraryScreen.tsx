@@ -24,6 +24,8 @@ import { ScreenWrapper } from '../components/ScreenWrapper';
 import { supabase } from '../services/supabaseClient';
 import { authService } from '../services/authService';
 import { professionalService } from '../services/professionalService';
+import { treinoNovoService } from '../services/treinoNovoService';
+import { Treino } from '../types';
 
 interface WorkoutLibraryScreenProps {
  navigation: any;
@@ -36,18 +38,13 @@ interface WorkoutLibraryScreenProps {
  };
 }
 
-interface WorkoutTemplate {
- id: string;
- exercicio: string;
- descricao?: string;
- series: number;
- repeticoes: string | number;
- nivel: 'iniciante' | 'intermediario' | 'avancado';
- categoria: string;
- duracao_min: number;
- publico: boolean;
- criado_por?: string;
- usuario_id?: string; // Added to track user ownership
+interface WorkoutTemplate extends Treino {
+ // Manter compatibilidade com campos antigos
+ exercicio?: string; // Mapeado para 'nome'
+ categoria?: string; // Mapeado para 'objetivo'
+ duracao_min?: number; // Mapeado para 'duracao_estimada'
+ publico?: boolean; // Mapeado para 'is_publico'
+ usuario_id?: string; // Mapeado para 'criado_por'
 }
 
 export const WorkoutLibraryScreen = memo<WorkoutLibraryScreenProps>(({ navigation, route }) => {
@@ -84,49 +81,59 @@ export const WorkoutLibraryScreen = memo<WorkoutLibraryScreenProps>(({ navigatio
    // Check if user has a personal trainer
    if (userProfile?.tipo === 'aluno') {
     const { data: trainerData } = await supabase
-     .from('professional_clients')
-     .select('professional_id')
-     .eq('client_id', userProfile?.user_id || userProfile?.id)
-     .eq('status', 'ativo')
+     .from('personal_aluno')
+     .select('personal_id')
+     .eq('aluno_id', userProfile?.user_id || userProfile?.id)
+     .eq('ativo', true)
      .limit(1);
     
     setHasPersonalTrainer(trainerData && trainerData.length > 0);
    }
    
-   // Load workouts based on filter
-   let query = supabase.from('treinos').select('*');
+   // Build filter object for treino service
+   const filtros: any = {};
    
    if (userProfile) {
-    if (isAssignmentMode) {
-     // When in assignment mode, always show public library workouts
-     query = query.eq('publico', true);
+    if (isAssignmentMode || filter === 'biblioteca') {
+     // Show public workouts from library
     } else if (filter === 'meus') {
-     // Show only user's workouts (private copies they added)
-     query = query.eq('usuario_id', userProfile?.user_id || userProfile?.id);
-    } else {
-     // Show only public workouts from library (including those with null usuario_id)
-     query = query.eq('publico', true);
+     // Show only user's workouts
+     filtros.criado_por = userProfile?.user_id || userProfile?.id;
     }
    }
    
-   query = query.order('data_criacao', { ascending: false });
+   // Add level filter if selected
+   if (filter === 'iniciante' || filter === 'intermediario' || filter === 'avancado') {
+    filtros.nivel = filter;
+   }
    
-   const { data, error } = await query;
-
-   if (error) {
-    console.error('Erro ao carregar treinos:', error);
+   // Load workouts using the new service
+   const response = await treinoNovoService.buscarTreinos(filtros, 1, 100);
+   
+   if (!response || !response.data) {
+    console.error('Erro ao carregar treinos: resposta inválida');
     Alert.alert('Erro', 'Não foi possível carregar os treinos');
     return;
    }
 
-   setWorkouts(data || []);
+   // Convert to WorkoutTemplate format for compatibility
+   const convertedWorkouts: WorkoutTemplate[] = response.data.map(treino => ({
+    ...treino,
+    exercicio: treino.nome, // Map nome to exercicio for compatibility
+    categoria: treino.objetivo || 'Geral',
+    duracao_min: treino.duracao_estimada || 30,
+    publico: treino.is_publico,
+    usuario_id: treino.criado_por,
+   }));
+
+   setWorkouts(convertedWorkouts);
   } catch (error: any) {
    console.error('Erro ao carregar treinos:', error);
    Alert.alert('Erro', error.message || 'Erro desconhecido');
   } finally {
    setLoading(false);
   }
- }, [filter]);
+ }, [filter, isAssignmentMode]);
 
  const handleRefresh = useCallback(async () => {
   setRefreshing(true);
@@ -173,7 +180,7 @@ export const WorkoutLibraryScreen = memo<WorkoutLibraryScreenProps>(({ navigatio
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert(
      'Treino Atribuído! ✅', 
-     `O treino "${workout.exercicio}" foi atribuído com sucesso para ${clientName}.`,
+     `O treino "${workout.exercicio || workout.nome}" foi atribuído com sucesso para ${clientName}.`,
      [
       {
        text: 'OK',
@@ -196,26 +203,12 @@ export const WorkoutLibraryScreen = memo<WorkoutLibraryScreenProps>(({ navigatio
     return;
    }
 
-   const { data: { user } } = await supabase.auth.getUser();
-   if (!user) throw new Error('Usuário não autenticado');
-
-   // Create a copy of the template as "MEU TREINO"
-   const { error } = await supabase
-    .from('treinos')
-    .insert({
-     usuario_id: user.id,
-     exercicio: workout.exercicio,
-     descricao: workout.descricao,
-     series: workout.series,
-     repeticoes: typeof workout.repeticoes === 'number' ? workout.repeticoes.toString() : workout.repeticoes,
-     nivel: workout.nivel,
-     categoria: workout.categoria,
-     duracao_min: workout.duracao_min,
-     status: 'planned',
-     publico: false,
-    });
-
-   if (error) throw error;
+   // Duplicate the workout using the new service
+   const response = await treinoNovoService.duplicar(workout.id, `${workout.nome} (Minha Cópia)`);
+   
+   if (!response.success || !response.data) {
+    throw new Error(response.error || 'Erro ao duplicar treino');
+   }
 
    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
    
@@ -233,7 +226,7 @@ export const WorkoutLibraryScreen = memo<WorkoutLibraryScreenProps>(({ navigatio
 
  // Filtrar workouts
  const filteredWorkouts = workouts.filter(workout => {
-  const matchesSearch = workout.exercicio.toLowerCase().includes(searchText.toLowerCase()) ||
+  const matchesSearch = (workout.exercicio || workout.nome || '').toLowerCase().includes(searchText.toLowerCase()) ||
              (workout.descricao?.toLowerCase().includes(searchText.toLowerCase()));
   
   if (!matchesSearch) return false;
@@ -283,7 +276,7 @@ export const WorkoutLibraryScreen = memo<WorkoutLibraryScreenProps>(({ navigatio
     }}>
      <View style={{ flex: 1 }}>
       <Text style={[typography.presets.cardTitle, { marginBottom: spacing.xxs }]}>
-       {item.exercicio}
+       {item.exercicio || item.nome}
       </Text>
       {item.descricao && (
        <Text style={[
@@ -320,19 +313,19 @@ export const WorkoutLibraryScreen = memo<WorkoutLibraryScreenProps>(({ navigatio
      <View style={{ flexDirection: 'row', gap: spacing.lg }}>
       <View style={{ alignItems: 'center' }}>
        <Text style={[typography.presets.caption, { color: colors.text.tertiary }]}>
-        Séries
+        Nível
        </Text>
        <Text style={[typography.presets.body, { fontWeight: '600' }]}>
-        {item.series}
+        {item.nivel}
        </Text>
       </View>
       
       <View style={{ alignItems: 'center' }}>
        <Text style={[typography.presets.caption, { color: colors.text.tertiary }]}>
-        Reps
+        Objetivo
        </Text>
        <Text style={[typography.presets.body, { fontWeight: '600' }]}>
-        {item.repeticoes}
+        {item.objetivo || item.categoria || 'Geral'}
        </Text>
       </View>
       
@@ -341,7 +334,7 @@ export const WorkoutLibraryScreen = memo<WorkoutLibraryScreenProps>(({ navigatio
         Tempo
        </Text>
        <Text style={[typography.presets.body, { fontWeight: '600' }]}>
-        {item.duracao_min}min
+        {item.duracao_estimada || item.duracao_min || 30}min
        </Text>
       </View>
      </View>
@@ -372,7 +365,7 @@ export const WorkoutLibraryScreen = memo<WorkoutLibraryScreenProps>(({ navigatio
      gap: spacing.sm,
     }}>
      <Text style={typography.presets.caption}>
-      📂 {item.categoria}
+      📂 {item.objetivo || item.categoria || 'Geral'}
      </Text>
      <View style={{
       width: 4,

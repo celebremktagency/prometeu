@@ -30,6 +30,7 @@ import { ClientProgressScreen } from '../screens/ClientProgressScreen'
 import { ConnectPersonalScreen } from '../screens/ConnectPersonalScreen'
 import { TrainerWorkspaceScreen } from '../screens/TrainerWorkspaceScreen'
 import { CreateExerciseScreen } from '../screens/CreateExerciseScreen'
+import { CreateProgramScreen } from '../screens/CreateProgramScreen'
 import ProgramLibraryScreen from '../screens/ProgramLibraryScreen'
 import ExerciseLibraryScreen from '../screens/ExerciseLibraryScreen'
 import { authService } from '../services/authService'
@@ -140,6 +141,7 @@ export const AppNavigation = () => {
        <Stack.Screen name="ConnectPersonal" component={ConnectPersonalScreen} />
        <Stack.Screen name="TrainerWorkspace" component={TrainerWorkspaceScreen} />
        <Stack.Screen name="CreateExercise" component={CreateExerciseScreen} />
+       <Stack.Screen name="CreateProgram" component={CreateProgramScreen} />
        <Stack.Screen name="ProgramLibrary" component={ProgramLibraryScreen} />
        <Stack.Screen name="ExerciseLibrary" component={ExerciseLibraryScreen} />
       </>

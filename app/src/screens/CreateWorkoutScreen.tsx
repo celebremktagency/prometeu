@@ -43,6 +43,7 @@ export const CreateWorkoutScreen = memo<CreateWorkoutScreenProps>(({ navigation,
  const [exerciciosSelecionados, setExerciciosSelecionados] = useState<{exercicio: Exercicio, ordem: number, series?: number, repeticoes?: string, peso_sugerido?: number, tempo_descanso?: number}[]>([]);
  const [busca, setBusca] = useState('');
  const [loading, setLoading] = useState(false);
+ const [mostrarExercicios, setMostrarExercicios] = useState(false);
 
  const NIVEIS = [
   { id: 'iniciante', label: 'Iniciante', icon: '🟢', color: colors.accent.secondary },
