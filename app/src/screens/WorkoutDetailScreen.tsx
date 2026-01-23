@@ -46,10 +46,10 @@ export const WorkoutDetailScreen = memo<WorkoutDetailScreenProps>(({ navigation,
    // Check if user has a personal trainer
    if (profile?.tipo === 'aluno') {
     const { data: trainerData } = await supabase
-     .from('professional_clients')
-     .select('professional_id')
-     .eq('client_id', profile?.user_id || profile?.id)
-     .eq('status', 'ativo')
+     .from('personal_aluno')
+     .select('personal_id')
+     .eq('aluno_id', profile?.user_id || profile?.id)
+     .eq('ativo', true)
      .limit(1);
     
     setHasPersonalTrainer(trainerData && trainerData.length > 0);

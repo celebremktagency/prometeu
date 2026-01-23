@@ -15,6 +15,7 @@ import {
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { treinoService } from '../services/treinoService';
 import { authService } from '../services/authService';
+import { supabase } from '../services/supabaseClient';
 
 interface CalendarScreenProps {
  navigation: any;
@@ -34,10 +35,29 @@ export const CalendarScreen = memo<CalendarScreenProps>(({ navigation }) => {
  const [treinos, setTreinos] = useState<any[]>([]);
  const [loading, setLoading] = useState(true);
  const [selectedDay, setSelectedDay] = useState<DayData | null>(null);
+ const [userType, setUserType] = useState<string>('');
+ const [hasPersonalTrainer, setHasPersonalTrainer] = useState(false);
 
  const loadData = useCallback(async () => {
   try {
    setLoading(true);
+   
+   // Carregar perfil do usuário
+   const userProfile = await authService.getCurrentUserProfile();
+   setUserType(userProfile?.tipo || '');
+   
+   // Verificar se tem personal trainer
+   if (userProfile?.tipo === 'aluno') {
+    const { data: trainerData } = await supabase
+     .from('personal_aluno')
+     .select('personal_id')
+     .eq('aluno_id', userProfile?.user_id || userProfile?.id)
+     .eq('ativo', true)
+     .limit(1);
+    
+    setHasPersonalTrainer(trainerData && trainerData.length > 0);
+   }
+   
    const treinosData = await treinoService.listarTreinos();
    setTreinos(treinosData);
   } catch (error) {
@@ -133,9 +153,19 @@ export const CalendarScreen = memo<CalendarScreenProps>(({ navigation }) => {
  }, []);
 
  const handleCreateWorkout = useCallback(() => {
+  // Verificar se o usuário pode criar treinos
+  if (userType === 'aluno' && hasPersonalTrainer) {
+   Alert.alert(
+    'Não é possível criar treino',
+    'Você possui um personal trainer ativo. Apenas seu personal trainer pode criar e atribuir treinos para você.\n\nConsulte seu personal trainer para agendar novos treinos.',
+    [{ text: 'Entendi', style: 'default' }]
+   );
+   return;
+  }
+  
   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   navigation.navigate('CreateWorkout', { date: selectedDay?.date });
- }, [navigation, selectedDay]);
+ }, [navigation, selectedDay, userType, hasPersonalTrainer]);
 
  const getWorkoutStatus = (workout: any) => {
   switch (workout.status) {
@@ -334,13 +364,15 @@ export const CalendarScreen = memo<CalendarScreenProps>(({ navigation }) => {
          })}
         </Text>
         
-        <Button
-         title="Criar"
-         onPress={handleCreateWorkout}
-         variant="gradient"
-         size="sm"
-         icon={<Text style={{ fontSize: 14 }}>➕</Text>}
-        />
+        {!(userType === 'aluno' && hasPersonalTrainer) && (
+         <Button
+          title="Criar"
+          onPress={handleCreateWorkout}
+          variant="gradient"
+          size="sm"
+          icon={<Text style={{ fontSize: 14 }}>➕</Text>}
+         />
+        )}
        </View>
 
        {selectedDay.workouts.length === 0 ? (
