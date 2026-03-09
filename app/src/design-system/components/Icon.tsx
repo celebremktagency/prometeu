@@ -98,6 +98,14 @@ export const iconMap = {
  // Formulários e inputs
  'eye': { family: 'Ionicons' as IconFamily, name: 'eye' },
  'eye-off': { family: 'Ionicons' as IconFamily, name: 'eye-off' },
+
+ // Ícones adicionais que faltavam
+ 'tool': { family: 'MaterialCommunityIcons' as IconFamily, name: 'wrench' },
+ 'repeat': { family: 'MaterialCommunityIcons' as IconFamily, name: 'repeat' },
+ 'copy': { family: 'MaterialCommunityIcons' as IconFamily, name: 'content-copy' },
+ 'clipboard': { family: 'MaterialCommunityIcons' as IconFamily, name: 'clipboard' },
+ 'chevron-right': { family: 'MaterialCommunityIcons' as IconFamily, name: 'chevron-right' },
+ 'chevron-left': { family: 'MaterialCommunityIcons' as IconFamily, name: 'chevron-left' },
  
  // Mídia e conteúdo
  'video': { family: 'Ionicons' as IconFamily, name: 'videocam' },

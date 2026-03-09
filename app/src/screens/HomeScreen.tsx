@@ -62,7 +62,7 @@ export const HomeScreen = memo<HomeScreenProps>(({ navigation }) => {
    setUser(userProfile);
    
    // Redirecionar personal trainer para sua dashboard específica
-   if (userProfile?.tipo === 'personal_trainer') {
+   if (userProfile?.tipo === 'personal_trainer' || userProfile?.tipo === 'profissional') {
     navigation.replace('ProfessionalDashboard');
     return;
    }
@@ -158,7 +158,8 @@ export const HomeScreen = memo<HomeScreenProps>(({ navigation }) => {
       const weeklyData = [];
       
       // Começar de domingo (início da semana)
-      const inicioSemana = new Date(hoje);
+      const inicioSemana = new Date();
+      const hoje = new Date();
       inicioSemana.setDate(hoje.getDate() - hoje.getDay()); // Volta para o domingo
       
       for (let i = 0; i < 7; i++) {

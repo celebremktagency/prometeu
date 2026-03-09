@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://jndkdbetebrlijohtuoz.supabase.co'
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpuZGtkYmV0ZWJybGlqb2h0dW96Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNDYxODIsImV4cCI6MjA4MzgyMjE4Mn0.qBz0GVDtGqSIgouXQW5EdCxPevekPPY7cq4gV-3k6NA'

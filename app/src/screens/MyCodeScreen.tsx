@@ -29,7 +29,9 @@ export const MyCodeScreen = memo<MyCodeScreenProps>(({ navigation }) => {
    const currentUser = await authService.getCurrentUserProfile();
    setUser(currentUser);
    
-   const code = await inviteService.generateProfessionalCode(currentUser.id);
+   // Use user_id if available, otherwise fallback to id
+   const userId = currentUser.user_id || currentUser.id;
+   const code = await inviteService.generateProfessionalCode(userId);
    setMyCode(code);
   } catch (error: any) {
    console.error('Erro ao carregar dados:', error);

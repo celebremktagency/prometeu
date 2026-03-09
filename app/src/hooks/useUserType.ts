@@ -20,14 +20,26 @@ export const useUserType = () => {
     return;
    }
 
-   // Check if user is a professional/trainer
-   const { data: professional } = await supabase
-    .from('profissionais')
-    .select('id')
+   // Check user profile first for type
+   const { data: userProfile } = await supabase
+    .from('user_profiles')
+    .select('tipo')
     .eq('user_id', user.id)
     .single();
 
-   setUserType(professional ? 'trainer' : 'client');
+   // Check if user type indicates trainer/professional
+   if (userProfile?.tipo === 'personal_trainer' || userProfile?.tipo === 'profissional') {
+    setUserType('trainer');
+   } else {
+    // Fallback: check profissionais table
+    const { data: professional } = await supabase
+     .from('profissionais')
+     .select('id')
+     .eq('user_id', user.id)
+     .single();
+
+    setUserType(professional ? 'trainer' : 'client');
+   }
   } catch (error) {
    console.log('Error checking user type:', error);
    setUserType('client');

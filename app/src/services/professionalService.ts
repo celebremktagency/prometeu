@@ -44,7 +44,7 @@ class ProfessionalService {
    }
 
    // Verificar se é profissional
-   if (userProfile.tipo === 'aluno') {
+   if (userProfile.tipo !== 'personal_trainer' && userProfile.tipo !== 'profissional') {
     console.log('Usuário não é um profissional cadastrado');
     return [];
    }
@@ -109,7 +109,7 @@ class ProfessionalService {
     .eq('user_id', user.id)
     .single();
 
-   if (profileError || !userProfile || userProfile.tipo === 'aluno') {
+   if (profileError || !userProfile || (userProfile.tipo !== 'personal_trainer' && userProfile.tipo !== 'profissional')) {
     throw new Error('Usuário não é um profissional cadastrado');
    }
 
@@ -168,7 +168,7 @@ class ProfessionalService {
     .eq('user_id', user.id)
     .single();
 
-   if (profileError || !userProfile || userProfile.tipo === 'aluno') {
+   if (profileError || !userProfile || (userProfile.tipo !== 'personal_trainer' && userProfile.tipo !== 'profissional')) {
     throw new Error('Usuário não é um profissional cadastrado');
    }
 
@@ -282,7 +282,7 @@ class ProfessionalService {
     .eq('user_id', user.id)
     .single();
 
-   if (profileError || !userProfile || userProfile.tipo === 'aluno') {
+   if (profileError || !userProfile || (userProfile.tipo !== 'personal_trainer' && userProfile.tipo !== 'profissional')) {
     throw new Error('Usuário não é um profissional cadastrado');
    }
 
@@ -320,7 +320,7 @@ class ProfessionalService {
     .eq('user_id', user.id)
     .single();
 
-   if (profileError || !userProfile || userProfile.tipo === 'aluno') {
+   if (profileError || !userProfile || (userProfile.tipo !== 'personal_trainer' && userProfile.tipo !== 'profissional')) {
     throw new Error('Usuário não é um profissional cadastrado');
    }
 
@@ -375,8 +375,8 @@ class ProfessionalService {
   try {
    const { data: professionals, error } = await supabase
     .from('user_profiles')
-    .select('id, user_id, nome, email, especialidade, experiencia, ativo')
-    .eq('tipo', 'profissional')
+    .select('id, user_id, nome, email, especialidade, experiencia, ativo, tipo')
+    .or('tipo.eq.personal_trainer,tipo.eq.profissional')
     .eq('ativo', true)
     .ilike('nome', `%${searchTerm}%`)
     .limit(20);
@@ -475,7 +475,7 @@ class ProfessionalService {
     .eq('user_id', user.id)
     .single();
 
-   if (profileError || !userProfile || userProfile.tipo !== 'personal_trainer') {
+   if (profileError || !userProfile || (userProfile.tipo !== 'personal_trainer' && userProfile.tipo !== 'profissional')) {
     throw new Error('Usuário não é um personal trainer');
    }
 

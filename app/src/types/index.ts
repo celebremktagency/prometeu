@@ -7,7 +7,7 @@ export interface User {
   id: string;
   nome: string;
   email: string;
-  tipo: 'aluno' | 'personal';
+  tipo: 'aluno' | 'personal' | 'personal_trainer' | 'profissional';
   plano: 'trial' | 'mensal' | 'anual';
   data_inicio: string;
   data_fim?: string;

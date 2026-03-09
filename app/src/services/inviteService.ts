@@ -21,8 +21,11 @@ export interface InviteCode {
 class InviteService {
  
  async generateProfessionalCode(professionalId: string): Promise<string> {
-  // Generate a unique code for the professional
-  const code = `PT${professionalId.slice(-6).toUpperCase()}`;
+  // Generate a more unique code for the professional
+  // Use last 4 characters of UUID + 2 random chars
+  const idSuffix = professionalId.replace(/-/g, '').slice(-4).toUpperCase();
+  const randomChars = Math.random().toString(36).substring(2, 4).toUpperCase();
+  const code = `PT${idSuffix}${randomChars}`;
   return code;
  }
 
@@ -194,38 +197,70 @@ class InviteService {
     throw new Error('Código inválido');
    }
    
-   // Extract ID suffix from code (last 6 characters)
-   const cleanCode = code.trim();
-   const professionalIdSuffix = cleanCode.replace('PT', '').toLowerCase();
+   const cleanCode = code.trim().toUpperCase();
    
-   // Get all personal trainers and filter by ID suffix in JavaScript
+   // Validate code format (should start with PT and be 8 chars)
+   if (!cleanCode.startsWith('PT') || cleanCode.length !== 8) {
+    throw new Error('Formato de código inválido. Use formato PTXXXXXX');
+   }
+   
+   // Extract suffix from code (remove PT prefix)
+   const codeSuffix = cleanCode.replace('PT', '');
+   
+   // Get all personal trainers (check both tipo values for compatibility)
    const { data, error } = await supabase
     .from('user_profiles')
-    .select('id, user_id, nome, email, created_at')
-    .eq('tipo', 'personal_trainer');
+    .select('id, user_id, nome, email, created_at, tipo')
+    .or('tipo.eq.personal_trainer,tipo.eq.profissional')
+    .eq('ativo', true);
 
    if (error) {
+    console.error('Database error:', error);
     throw new Error('Erro ao buscar personal trainer: ' + error.message);
    }
 
    if (!data || data.length === 0) {
-    throw new Error('Nenhum personal trainer encontrado');
+    throw new Error('Nenhum personal trainer ativo encontrado no sistema');
    }
 
-   // Find by ID suffix (checking both id and user_id)
-   const matchingProfessional = data.find(prof => {
-    const profId = prof.id?.toString().toLowerCase() || '';
-    const profUserId = prof.user_id?.toString().toLowerCase() || '';
-    return profId.endsWith(professionalIdSuffix) || profUserId.endsWith(professionalIdSuffix);
-   });
+   // Generate codes for all professionals and find match
+   let matchingProfessional = null;
+   
+   for (const prof of data) {
+    try {
+     const profCode = await this.generateProfessionalCode(prof.id || prof.user_id);
+     const profSuffix = profCode.replace('PT', '');
+     
+     if (profSuffix === codeSuffix) {
+      matchingProfessional = prof;
+      break;
+     }
+    } catch (error) {
+     console.log('Error generating code for professional:', prof.id);
+    }
+   }
 
    if (!matchingProfessional) {
-    throw new Error('Personal trainer não encontrado com este código');
+    // Fallback: try simpler matching with user_id/id suffix
+    const matchByIdSuffix = data.find(prof => {
+     const profId = (prof.id || prof.user_id || '').toString().replace(/-/g, '').slice(-4).toUpperCase();
+     return codeSuffix.startsWith(profId);
+    });
+    
+    if (matchByIdSuffix) {
+     matchingProfessional = matchByIdSuffix;
+    }
    }
 
+   if (!matchingProfessional) {
+    throw new Error('Personal trainer não encontrado com este código. Verifique se o código está correto.');
+   }
+
+   console.log('Personal trainer encontrado:', matchingProfessional.nome);
    return matchingProfessional;
 
   } catch (error: any) {
+   console.error('Error in findProfessionalByCode:', error);
    throw new Error(error.message || 'Erro ao buscar personal trainer');
   }
  }
