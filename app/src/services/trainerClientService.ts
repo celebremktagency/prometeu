@@ -4,24 +4,21 @@ export interface TrainerClientRelationship {
  id: string;
  trainer_id: string;
  client_id: string;
- status: 'pending' | 'approved' | 'rejected';
- requested_by: 'trainer' | 'client';
- created_at: string;
- updated_at: string;
+ started_at: string;
+ ended_at?: string;
  trainer?: any;
  client?: any;
 }
 
 export interface WorkoutAssignment {
  id: string;
- trainer_id: string;
- client_id: string;
- workout_template_id?: string;
- treino_id?: string;
- scheduled_days: string[]; // ['monday', 'wednesday', 'friday']
- start_date: string;
- end_date?: string;
- active: boolean;
+ treino_id: string;
+ aluno_id: string;
+ personal_id: string;
+ data_inicio: string;
+ data_fim?: string;
+ status: string;
+ observacoes?: string;
  created_at: string;
 }
 
@@ -31,33 +28,22 @@ class TrainerClientService {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Usuário não autenticado');
 
-  // Get trainer's professional ID
-  const { data: trainer, error: trainerError } = await supabase
-   .from('profissionais')
-   .select('id, user_id')
-   .eq('user_id', trainerUserId)
-   .single();
-
-  if (trainerError || !trainer) throw new Error('Treinador não encontrado');
-
   // Check if relationship already exists
   const { data: existing } = await supabase
-   .from('trainer_client_relationships')
+   .from('professional_clients')
    .select('id')
-   .eq('trainer_id', trainer.id)
+   .eq('trainer_id', trainerUserId)
    .eq('client_id', user.id)
    .single();
 
   if (existing) throw new Error('Solicitação já enviada');
 
-  // Create relationship request
   const { error } = await supabase
-   .from('trainer_client_relationships')
+   .from('professional_clients')
    .insert({
-    trainer_id: trainer.id,
+    trainer_id: trainerUserId,
     client_id: user.id,
-    status: 'pending',
-    requested_by: 'client'
+    started_at: new Date().toISOString()
    });
 
   if (error) throw error;
@@ -68,91 +54,34 @@ class TrainerClientService {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Usuário não autenticado');
 
-  // Get trainer's professional ID
-  const { data: trainer, error: trainerError } = await supabase
-   .from('profissionais')
-   .select('id')
+  const { data: profile } = await supabase
+   .from('user_profiles')
+   .select('tipo')
    .eq('user_id', user.id)
    .single();
 
-  if (trainerError || !trainer) throw new Error('Você não é um treinador cadastrado');
+  if (!profile || (profile.tipo !== 'personal_trainer' && profile.tipo !== 'profissional')) {
+   throw new Error('Você não é um treinador cadastrado');
+  }
 
-  // Check if relationship already exists
   const { data: existing } = await supabase
-   .from('trainer_client_relationships')
+   .from('professional_clients')
    .select('id')
-   .eq('trainer_id', trainer.id)
+   .eq('trainer_id', user.id)
    .eq('client_id', clientUserId)
    .single();
 
   if (existing) throw new Error('Convite já enviado');
 
-  // Create relationship request
   const { error } = await supabase
-   .from('trainer_client_relationships')
+   .from('professional_clients')
    .insert({
-    trainer_id: trainer.id,
+    trainer_id: user.id,
     client_id: clientUserId,
-    status: 'pending',
-    requested_by: 'trainer'
+    started_at: new Date().toISOString()
    });
 
   if (error) throw error;
- }
-
- // APPROVE/REJECT RELATIONSHIP
- async respondToRequest(relationshipId: string, approve: boolean): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Usuário não autenticado');
-
-  const { error } = await supabase
-   .from('trainer_client_relationships')
-   .update({
-    status: approve ? 'approved' : 'rejected',
-    updated_at: new Date().toISOString()
-   })
-   .eq('id', relationshipId);
-
-  if (error) throw error;
- }
-
- // GET PENDING REQUESTS FOR CURRENT USER
- async getPendingRequests(): Promise<TrainerClientRelationship[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Usuário não autenticado');
-
-  // Check if user is a trainer
-  const { data: trainer } = await supabase
-   .from('profissionais')
-   .select('id')
-   .eq('user_id', user.id)
-   .single();
-
-  let query = supabase
-   .from('trainer_client_relationships')
-   .select(`
-    *,
-    trainer:profissionais!trainer_client_relationships_trainer_id_fkey(
-     user_id,
-     tipo_profissional,
-     user_profiles!profissionais_user_id_fkey(nome, email)
-    ),
-    client:user_profiles!trainer_client_relationships_client_id_fkey(nome, email)
-   `)
-   .eq('status', 'pending');
-
-  if (trainer) {
-   // Trainer sees requests TO them
-   query = query.eq('trainer_id', trainer.id);
-  } else {
-   // Client sees requests FROM them
-   query = query.eq('client_id', user.id);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  return data || [];
  }
 
  // GET CURRENT TRAINER FOR CLIENT
@@ -160,21 +89,23 @@ class TrainerClientService {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Usuário não autenticado');
 
-  const { data, error } = await supabase
-   .from('trainer_client_relationships')
-   .select(`
-    *,
-    trainer:profissionais!trainer_client_relationships_trainer_id_fkey(
-     *,
-     user_profiles!profissionais_user_id_fkey(nome, email, avatar_url)
-    )
-   `)
+  const { data: connection, error } = await supabase
+   .from('professional_clients')
+   .select('*')
    .eq('client_id', user.id)
-   .eq('status', 'approved')
    .single();
 
   if (error && error.code !== 'PGRST116') throw error;
-  return data?.trainer || null;
+  if (!connection) return null;
+
+  // Buscar dados do treinador separadamente
+  const { data: trainerProfile } = await supabase
+   .from('user_profiles')
+   .select('nome, email, avatar_url')
+   .eq('user_id', connection.trainer_id)
+   .single();
+
+  return trainerProfile || null;
  }
 
  // GET CLIENTS FOR TRAINER
@@ -182,68 +113,47 @@ class TrainerClientService {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Usuário não autenticado');
 
-  // Get trainer's professional ID
-  const { data: trainer } = await supabase
-   .from('profissionais')
-   .select('id')
-   .eq('user_id', user.id)
-   .single();
-
-  if (!trainer) throw new Error('Você não é um treinador cadastrado');
-
-  const { data, error } = await supabase
-   .from('trainer_client_relationships')
-   .select(`
-    *,
-    client:user_profiles!trainer_client_relationships_client_id_fkey(*)
-   `)
-   .eq('trainer_id', trainer.id)
-   .eq('status', 'approved');
+  const { data: connections, error } = await supabase
+   .from('professional_clients')
+   .select('*')
+   .eq('trainer_id', user.id);
 
   if (error) throw error;
-  return data?.map(r => r.client) || [];
+  if (!connections || connections.length === 0) return [];
+
+  // Buscar dados dos clientes separadamente
+  const clientIds = connections.map(c => c.client_id);
+  const { data: clients } = await supabase
+   .from('user_profiles')
+   .select('*')
+   .in('user_id', clientIds);
+
+  return clients || [];
  }
 
  // ASSIGN WORKOUT TO CLIENT
  async assignWorkoutToClient(
-  clientId: string, 
+  clientId: string,
   workoutData: {
-   workout_template_id?: string;
-   treino_id?: string;
-   scheduled_days: string[];
-   start_date: string;
-   end_date?: string;
+   treino_id: string;
+   data_inicio: string;
+   data_fim?: string;
+   observacoes?: string;
   }
  ): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Usuário não autenticado');
 
-  // Get trainer's professional ID
-  const { data: trainer } = await supabase
-   .from('profissionais')
-   .select('id')
-   .eq('user_id', user.id)
-   .single();
-
-  if (!trainer) throw new Error('Você não é um treinador cadastrado');
-
-  // Ensure repeticoes is string if it exists in workoutData
-  const sanitizedWorkoutData = {
-   ...workoutData,
-   ...((workoutData as any).hasOwnProperty('repeticoes') && {
-    repeticoes: typeof (workoutData as any).repeticoes === 'number' 
-     ? (workoutData as any).repeticoes.toString() 
-     : (workoutData as any).repeticoes
-   })
-  };
-
   const { error } = await supabase
-   .from('workout_assignments')
+   .from('treinos_atribuidos')
    .insert({
-    trainer_id: trainer.id,
-    client_id: clientId,
-    ...sanitizedWorkoutData,
-    active: true
+    treino_id: workoutData.treino_id,
+    aluno_id: clientId,
+    personal_id: user.id,
+    data_inicio: workoutData.data_inicio,
+    data_fim: workoutData.data_fim || null,
+    observacoes: workoutData.observacoes || null,
+    status: 'ativo'
    });
 
   if (error) throw error;
@@ -254,27 +164,38 @@ class TrainerClientService {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Usuário não autenticado');
 
-  const today = new Date();
-  const dayName = today.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-  
-  const { data, error } = await supabase
-   .from('workout_assignments')
-   .select(`
-    *,
-    workout_template:workout_templates(*),
-    treino:treinos(*),
-    trainer:profissionais(
-     user_profiles!profissionais_user_id_fkey(nome)
-    )
-   `)
-   .eq('client_id', user.id)
-   .eq('active', true)
-   .contains('scheduled_days', [dayName])
-   .lte('start_date', today.toISOString().split('T')[0])
-   .or(`end_date.is.null,end_date.gte.${today.toISOString().split('T')[0]}`);
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data: assignments, error } = await supabase
+   .from('treinos_atribuidos')
+   .select('*')
+   .eq('aluno_id', user.id)
+   .eq('status', 'ativo')
+   .lte('data_inicio', today)
+   .or(`data_fim.is.null,data_fim.gte.${today}`);
 
   if (error) throw error;
-  return data || [];
+  if (!assignments || assignments.length === 0) return [];
+
+  // Buscar dados dos treinos separadamente
+  const treinoIds = assignments.map(a => a.treino_id);
+  const { data: treinos } = await supabase
+   .from('treinos')
+   .select('*')
+   .in('id', treinoIds);
+
+  // Buscar dados do personal
+  const personalIds = [...new Set(assignments.map(a => a.personal_id))];
+  const { data: personals } = await supabase
+   .from('user_profiles')
+   .select('user_id, nome')
+   .in('user_id', personalIds);
+
+  return assignments.map(a => ({
+   ...a,
+   treino: treinos?.find(t => t.id === a.treino_id) || null,
+   personal: personals?.find(p => p.user_id === a.personal_id) || null,
+  }));
  }
 }
 

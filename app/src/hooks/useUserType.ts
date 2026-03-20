@@ -31,14 +31,9 @@ export const useUserType = () => {
    if (userProfile?.tipo === 'personal_trainer' || userProfile?.tipo === 'profissional') {
     setUserType('trainer');
    } else {
-    // Fallback: check profissionais table
-    const { data: professional } = await supabase
-     .from('profissionais')
-     .select('id')
-     .eq('user_id', user.id)
-     .single();
-
-    setUserType(professional ? 'trainer' : 'client');
+    // Fallback: sem perfil no banco, usar metadata do auth
+    const tipo = user.user_metadata?.tipo;
+    setUserType(tipo === 'personal_trainer' || tipo === 'profissional' ? 'trainer' : 'client');
    }
   } catch (error) {
    console.log('Error checking user type:', error);

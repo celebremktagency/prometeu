@@ -90,11 +90,7 @@ export const ProfessionalCalendarScreen = memo<ProfessionalCalendarScreenProps>(
    // Load scheduled workouts for this week
    const { data: scheduledWorkouts, error } = await supabase
     .from('treinos_atribuidos')
-    .select(`
-     *,
-     aluno:user_profiles!aluno_id(id, nome, email),
-     workout:workout_templates!workout_id(id, nome)
-    `)
+    .select('*')
     .eq('personal_id', currentUser.id)
     .gte('data_inicio', weekStart)
     .lte('data_inicio', weekEnd)
@@ -104,6 +100,15 @@ export const ProfessionalCalendarScreen = memo<ProfessionalCalendarScreenProps>(
     console.log('Erro ao carregar treinos agendados:', error);
     return;
    }
+
+   // Buscar dados de alunos e treinos separadamente
+   const alunoIds = [...new Set((scheduledWorkouts || []).map(w => w.aluno_id))];
+   const treinoIds = [...new Set((scheduledWorkouts || []).map(w => w.treino_id))];
+
+   const [{ data: alunos }, { data: treinos }] = await Promise.all([
+    supabase.from('user_profiles').select('user_id, nome, email').in('user_id', alunoIds.length ? alunoIds : ['']),
+    supabase.from('treinos').select('id, nome').in('id', treinoIds.length ? treinoIds : [''])
+   ]);
 
    // Group workouts by date
    const workoutsByDate: { [date: string]: WorkoutSchedule[] } = {};
@@ -117,12 +122,12 @@ export const ProfessionalCalendarScreen = memo<ProfessionalCalendarScreenProps>(
     workoutsByDate[date].push({
      id: item.id,
      client_id: item.aluno_id,
-     client_name: item.aluno?.nome || 'Cliente',
-     workout_name: item.workout?.nome || item.nome_personalizado || 'Treino',
+     client_name: alunos?.find(a => a.user_id === item.aluno_id)?.nome || 'Cliente',
+     workout_name: treinos?.find(t => t.id === item.treino_id)?.nome || 'Treino',
      scheduled_date: item.data_inicio,
      scheduled_time: item.horario_sugerido,
      status: item.status === 'completed' ? 'completed' : 'scheduled',
-     workout_template_id: item.workout_id,
+     workout_template_id: item.treino_id,
     });
    });
 

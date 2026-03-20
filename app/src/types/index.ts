@@ -9,14 +9,21 @@ export interface User {
   email: string;
   tipo: 'aluno' | 'personal' | 'personal_trainer' | 'profissional';
   plano: 'trial' | 'mensal' | 'anual';
-  data_inicio: string;
-  data_fim?: string;
   created_at: string;
+  ativo?: boolean;
+  especialidade?: string;
+  experiencia?: string;
+  avatar_url?: string;
 }
 
 export interface UserProfile {
   id: string;
   user_id: string;
+  nome?: string;
+  email?: string;
+  tipo?: 'aluno' | 'personal_trainer' | 'profissional';
+  plano?: string;
+  ativo?: boolean;
   idade?: number;
   peso?: number;
   altura?: number;
@@ -28,6 +35,11 @@ export interface UserProfile {
   atividade_fisica_frequencia?: string;
   medicamentos?: string;
   restricoes_medicas?: string;
+  especialidade?: string;
+  experiencia?: string;
+  avatar_url?: string;
+  nivel_dor_atual?: number;
+  localizacao_dor?: string;
   created_at: string;
   updated_at: string;
 }

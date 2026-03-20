@@ -88,18 +88,21 @@ export const HomeScreen = memo<HomeScreenProps>(({ navigation }) => {
     try {
      const { data: treinosAtribuidos, error: atribuidosError } = await supabase
       .from('treinos_atribuidos')
-      .select(`
-       *,
-       treino:treinos(*)
-      `)
-      .eq('aluno_id', userProfile.id)
+      .select('*')
+      .eq('aluno_id', userProfile.id || userProfile.user_id)
       .eq('status', 'ativo')
-      .order('data_atribuicao', { ascending: false });
-     
-     if (!atribuidosError && treinosAtribuidos) {
+      .order('created_at', { ascending: false });
+
+     if (!atribuidosError && treinosAtribuidos && treinosAtribuidos.length > 0) {
+      const treinoIds = treinosAtribuidos.map(ta => ta.treino_id);
+      const { data: treinosData } = await supabase
+       .from('treinos')
+       .select('*')
+       .in('id', treinoIds);
+
       const treinosDoPersonal = treinosAtribuidos.map(ta => ({
-       ...ta.treino,
-       atribuido_em: ta.data_atribuicao,
+       ...(treinosData?.find(t => t.id === ta.treino_id) || {}),
+       atribuido_em: ta.created_at,
        observacoes_personal: ta.observacoes,
        data_inicio: ta.data_inicio,
        status_atribuicao: ta.status

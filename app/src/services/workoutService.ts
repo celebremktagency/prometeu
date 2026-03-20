@@ -33,10 +33,9 @@ export const workoutService = {
   if (!user) return false
 
   const { data, error } = await supabase
-   .from('profissional_cliente')
-   .select('*')
-   .eq('cliente_id', user.id)
-   .eq('status', 'ativo')
+   .from('professional_clients')
+   .select('id')
+   .eq('client_id', user.id)
    .maybeSingle()
 
   return !!data
@@ -47,19 +46,22 @@ export const workoutService = {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data, error } = await supabase
-   .from('profissional_cliente')
-   .select(`
-    *,
-    profissional:profissionais(user_id, tipo_profissional),
-    user:users!profissional_cliente_profissional_id_fkey(nome)
-   `)
-   .eq('cliente_id', user.id)
-   .eq('status', 'ativo')
+  const { data: connection, error } = await supabase
+   .from('professional_clients')
+   .select('*')
+   .eq('client_id', user.id)
    .maybeSingle()
 
   if (error) throw error
-  return data
+  if (!connection) return null
+
+  const { data: trainerProfile } = await supabase
+   .from('user_profiles')
+   .select('user_id, nome, tipo')
+   .eq('user_id', connection.trainer_id)
+   .single()
+
+  return { ...connection, trainer: trainerProfile }
  },
 
  // Listar treinos do usuário
@@ -72,17 +74,18 @@ export const workoutService = {
 
   if (hasPersonal) {
    // Se tem personal, buscar treinos atribuídos
-   const { data, error } = await supabase
+   const { data: atribuidos, error } = await supabase
     .from('treinos_atribuidos')
-    .select(`
-     *,
-     workout_template:workout_templates(*)
-    `)
+    .select('*')
     .eq('aluno_id', user.id)
     .eq('status', 'ativo')
 
    if (error) throw error
-   return data?.map(item => item.workout_template) || []
+   if (!atribuidos || atribuidos.length === 0) return []
+
+   const treinoIds = atribuidos.map(a => a.treino_id)
+   const { data: treinos } = await supabase.from('treinos').select('*').in('id', treinoIds)
+   return treinos || []
   } else {
    // Se não tem personal, buscar treinos próprios
    const { data, error } = await supabase
@@ -192,26 +195,24 @@ export const workoutService = {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return []
 
-  // Primeiro buscar o profissional_id do usuário atual
-  const { data: profData, error: profError } = await supabase
-   .from('profissionais')
-   .select('id')
-   .eq('user_id', user.id)
-   .single()
-
-  if (profError || !profData) return []
-
-  const { data, error } = await supabase
-   .from('profissional_cliente')
-   .select(`
-    *,
-    cliente:users!profissional_cliente_cliente_id_fkey(nome, email)
-   `)
-   .eq('profissional_id', profData.id)
-   .eq('status', 'ativo')
+  const { data: connections, error } = await supabase
+   .from('professional_clients')
+   .select('*')
+   .eq('trainer_id', user.id)
 
   if (error) throw error
-  return data || []
+  if (!connections || connections.length === 0) return []
+
+  const clientIds = connections.map(c => c.client_id)
+  const { data: clients } = await supabase
+   .from('user_profiles')
+   .select('user_id, nome, email')
+   .in('user_id', clientIds)
+
+  return connections.map(conn => ({
+   ...conn,
+   cliente: clients?.find(c => c.user_id === conn.client_id) || null
+  }))
  },
 
  // Para personal trainers: atribuir treino a aluno
@@ -223,10 +224,10 @@ export const workoutService = {
    .from('treinos_atribuidos')
    .insert([
     {
-     workout_template_id: workoutTemplateId,
+     treino_id: workoutTemplateId,
      aluno_id: alunoId,
      personal_id: user.id,
-     data_atribuicao: new Date().toISOString(),
+     data_inicio: new Date().toISOString().split('T')[0],
      status: 'ativo'
     }
    ])

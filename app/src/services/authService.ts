@@ -12,7 +12,7 @@ export const authService = {
  async signUp(email: string, password: string, name: string, tipo: 'aluno' | 'personal_trainer') {
   try {
    console.log('Tentando criar usuário:', { email, name, tipo })
-   
+
    const { data: authData, error: authError } = await supabase.auth.signUp({
     email: email,
     password: password,
@@ -32,17 +32,35 @@ export const authService = {
    }
 
    if (authData.user) {
+    // Salvar perfil no banco de dados
     const profileData = {
-     id: authData.user.id,
+     user_id: authData.user.id,
      nome: name,
      email: email,
      tipo: tipo,
      plano: 'trial',
-     created_at: new Date().toISOString()
+     ativo: true,
+     created_at: new Date().toISOString(),
+     updated_at: new Date().toISOString()
     }
 
-    console.log('Usuário criado com sucesso:', profileData)
-    return { user: authData.user, profile: profileData }
+    // Tentar inserir perfil (ignora se já existe)
+    const { error: profileError } = await supabase
+     .from('user_profiles')
+     .insert(profileData)
+
+    if (profileError) {
+     // Se já existe, tentar update
+     if (profileError.code === '23505') {
+      await supabase.from('user_profiles').update(profileData).eq('user_id', authData.user.id)
+     } else {
+      console.warn('Aviso: perfil não salvo no banco:', profileError.message)
+     }
+    } else {
+     console.log('Perfil salvo no banco com sucesso')
+    }
+
+    return { user: authData.user, profile: { id: authData.user.id, ...profileData } }
    }
 
    throw new Error('Falha ao criar usuário')
@@ -62,17 +80,42 @@ export const authService = {
    if (error) throw error
 
    if (data.user) {
-    // Criar perfil com dados do Auth
-    const profile = {
-     id: data.user.id,
-     nome: data.user.user_metadata?.name || 'Usuário',
-     email: data.user.email,
-     tipo: data.user.user_metadata?.tipo || 'aluno',
-     plano: 'trial',
-     created_at: data.user.created_at
+    // Buscar perfil do banco
+    const { data: dbProfile } = await supabase
+     .from('user_profiles')
+     .select('*')
+     .eq('user_id', data.user.id)
+     .single()
+
+    if (dbProfile) {
+     return { user: data.user, profile: dbProfile }
     }
 
-    return { user: data.user, profile }
+    // Se não existe no banco, criar perfil com dados do Auth
+    const profileData = {
+     user_id: data.user.id,
+     nome: data.user.user_metadata?.name || 'Usuário',
+     email: data.user.email || '',
+     tipo: data.user.user_metadata?.tipo || 'aluno',
+     plano: 'trial',
+     ativo: true,
+     created_at: data.user.created_at,
+     updated_at: new Date().toISOString()
+    }
+
+    const { error: profileError } = await supabase
+     .from('user_profiles')
+     .insert(profileData)
+
+    if (profileError) {
+     if (profileError.code === '23505') {
+      await supabase.from('user_profiles').update(profileData).eq('user_id', data.user.id)
+     } else {
+      console.warn('Aviso: perfil não salvo no banco:', profileError.message)
+     }
+    }
+
+    return { user: data.user, profile: { id: data.user.id, ...profileData } }
    }
 
    throw new Error('Falha no login')
@@ -104,7 +147,25 @@ export const authService = {
   const user = await this.getCurrentUser()
   if (!user) return null
 
-  // Retornar dados do Auth sem buscar na tabela
+  // Buscar perfil do banco
+  const { data: dbProfile } = await supabase
+   .from('user_profiles')
+   .select('*')
+   .eq('user_id', user.id)
+   .single()
+
+  if (dbProfile) {
+   return {
+    id: dbProfile.user_id || user.id,
+    nome: dbProfile.nome || user.user_metadata?.name || 'Usuário',
+    email: dbProfile.email || user.email!,
+    tipo: dbProfile.tipo || user.user_metadata?.tipo || 'aluno',
+    plano: dbProfile.plano || 'trial',
+    created_at: dbProfile.created_at || user.created_at
+   }
+  }
+
+  // Fallback: dados do Auth
   return {
    id: user.id,
    nome: user.user_metadata?.name || 'Usuário',

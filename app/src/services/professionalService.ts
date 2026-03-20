@@ -53,7 +53,7 @@ class ProfessionalService {
    const { data: relacionamentos, error: errorRel } = await supabase
     .from('professional_clients')
     .select('*')
-    .eq('professional_id', user.id)
+    .eq('trainer_id', user.id)
     .order('started_at', { ascending: false });
 
    if (errorRel) {
@@ -81,7 +81,7 @@ class ProfessionalService {
      aluno_id: rel.client_id, // Alias for compatibility
      nome: clienteData?.nome || 'Cliente sem nome',
      email: clienteData?.email || '',
-     status: rel.status,
+     status: 'ativo',
      data_inicio: rel.started_at,
      data_vinculo: rel.started_at, // Alias for compatibility
      tipo: clienteData?.tipo || 'aluno',
@@ -140,9 +140,8 @@ class ProfessionalService {
    const { error: insertError } = await supabase
     .from('professional_clients')
     .insert({
-     professional_id: user.id,
+     trainer_id: user.id,
      client_id: cliente.user_id,
-     status: 'ativo',
      started_at: new Date().toISOString(),
     });
 
@@ -174,8 +173,8 @@ class ProfessionalService {
 
    const { error } = await supabase
     .from('professional_clients')
-    .update({ status: 'pausado' })
-    .eq('professional_id', user.id)
+    .delete()
+    .eq('trainer_id', user.id)
     .eq('client_id', clienteId);
 
    if (error) {
@@ -217,8 +216,8 @@ class ProfessionalService {
    // Contar clientes
    const { data: clientes, error: clientesError } = await supabase
     .from('professional_clients')
-    .select('id, status')
-    .eq('professional_id', user.id);
+    .select('id')
+    .eq('trainer_id', user.id);
 
    if (clientesError) {
     console.error('Erro ao contar clientes:', clientesError);
@@ -226,7 +225,7 @@ class ProfessionalService {
    }
 
    const totalClientes = clientes?.length || 0;
-   const clientesAtivos = clientes?.filter(c => c.status === 'ativo').length || 0;
+   const clientesAtivos = totalClientes;
 
    // Contar templates de treino (assumindo que todos podem usar)
    const { data: templates, error: templatesError } = await supabase
@@ -290,9 +289,8 @@ class ProfessionalService {
    const { data: relacionamento } = await supabase
     .from('professional_clients')
     .select('id')
-    .eq('professional_id', userProfile.id)
+    .eq('trainer_id', user.id)
     .eq('client_id', clienteId)
-    .eq('status', 'ativo')
     .single();
 
    if (!relacionamento) {
@@ -328,34 +326,22 @@ class ProfessionalService {
    const { data: relacionamento } = await supabase
     .from('professional_clients')
     .select('id')
-    .eq('professional_id', userProfile.id)
+    .eq('trainer_id', user.id)
     .eq('client_id', clienteId)
-    .eq('status', 'ativo')
     .single();
 
    if (!relacionamento) {
     throw new Error('Cliente não encontrado ou não ativo');
    }
 
-   // Get user_id for the client
-   const { data: clientUser, error: clientUserError } = await supabase
-    .from('user_profiles')
-    .select('user_id')
-    .eq('id', clienteId)
-    .single();
-
-   if (clientUserError || !clientUser) {
-    throw new Error('Erro ao encontrar dados do cliente');
-   }
-
    // Atribuir o template criando um registro em treinos_atribuidos
    const { error: insertError } = await supabase
     .from('treinos_atribuidos')
     .insert({
-     workout_id: templateId,
-     aluno_id: clientUser.user_id,
+     treino_id: templateId,
+     aluno_id: clienteId,
      personal_id: user.id,
-     data_inicio: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
+     data_inicio: new Date().toISOString().split('T')[0],
      status: 'ativo',
     });
 
@@ -425,29 +411,24 @@ class ProfessionalService {
     return { success: false, error: 'Personal trainer não encontrado' };
    }
 
-   // Verificar se já existe uma conexão ou solicitação pendente
+   // Verificar se já existe uma conexão
    const { data: existingConnection } = await supabase
     .from('professional_clients')
-    .select('id, status')
+    .select('id')
     .eq('client_id', user.id)
-    .eq('professional_id', professionalUserId)
+    .eq('trainer_id', professionalUserId)
     .single();
 
    if (existingConnection) {
-    if (existingConnection.status === 'ativo') {
-     return { success: false, error: 'Você já está conectado a este personal trainer' };
-    } else if (existingConnection.status === 'pendente') {
-     return { success: false, error: 'Já existe uma solicitação pendente para este personal trainer' };
-    }
+    return { success: false, error: 'Você já está conectado a este personal trainer' };
    }
 
-   // Criar nova solicitação de conexão
+   // Criar nova conexão
    const { error: insertError } = await supabase
     .from('professional_clients')
     .insert({
-     professional_id: professionalUserId,
+     trainer_id: professionalUserId,
      client_id: user.id,
-     status: 'pendente',
      started_at: new Date().toISOString(),
     });
 
@@ -483,9 +464,8 @@ class ProfessionalService {
    const { data: relacionamento } = await supabase
     .from('professional_clients')
     .select('id')
-    .eq('professional_id', user.id)
+    .eq('trainer_id', user.id)
     .eq('client_id', clientUserId)
-    .eq('status', 'ativo')
     .single();
 
    if (!relacionamento) {

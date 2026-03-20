@@ -64,9 +64,8 @@ export const WorkoutTemplatesScreen = memo<WorkoutTemplatesScreenProps>(({ navig
    if (userProfile?.tipo === 'aluno') {
     const { data: trainerData } = await supabase
      .from('professional_clients')
-     .select('professional_id')
+     .select('trainer_id')
      .eq('client_id', userProfile?.user_id || userProfile?.id)
-     .eq('status', 'ativo')
      .limit(1);
     
     setHasPersonalTrainer(trainerData && trainerData.length > 0);

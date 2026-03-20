@@ -46,7 +46,7 @@ class InviteService {
     .from('professional_invites')
     .select('*')
     .eq('client_id', clientId)
-    .eq('professional_id', professional.user_id)
+    .eq('trainer_id', professional.user_id)
     .eq('status', 'pending')
     .single();
 
@@ -63,7 +63,7 @@ class InviteService {
     .from('professional_invites')
     .insert({
      client_id: clientId,
-     professional_id: professional.user_id,
+     trainer_id: professional.user_id,
      invite_code: inviteCode,
      status: 'pending',
      expires_at: expiresAt.toISOString(),
@@ -91,7 +91,7 @@ class InviteService {
      accepted_at: new Date().toISOString(),
     })
     .eq('id', inviteId)
-    .eq('professional_id', professionalId);
+    .eq('trainer_id', professionalId);
 
    if (updateError) {
     throw new Error('Erro ao aceitar convite: ' + updateError.message);
@@ -100,7 +100,7 @@ class InviteService {
    // Get invite details to create relationship
    const { data: invite, error: inviteError } = await supabase
     .from('professional_invites')
-    .select('client_id, professional_id')
+    .select('client_id, trainer_id')
     .eq('id', inviteId)
     .single();
 
@@ -112,10 +112,9 @@ class InviteService {
    const { error: relationError } = await supabase
     .from('professional_clients')
     .insert({
-     professional_id: invite.professional_id,
+     trainer_id: invite.trainer_id,
      client_id: invite.client_id,
      started_at: new Date().toISOString(),
-     status: 'ativo',
     });
 
    if (relationError) {
@@ -134,7 +133,7 @@ class InviteService {
     .from('professional_invites')
     .update({ status: 'rejected' })
     .eq('id', inviteId)
-    .eq('professional_id', professionalId);
+    .eq('trainer_id', professionalId);
 
    if (error) {
     throw new Error('Erro ao rejeitar convite: ' + error.message);
@@ -149,11 +148,8 @@ class InviteService {
   try {
    const { data, error } = await supabase
     .from('professional_invites')
-    .select(`
-     *,
-     client:user_profiles!client_id(id, nome, email)
-    `)
-    .eq('professional_id', professionalUserId)
+    .select('*')
+    .eq('trainer_id', professionalUserId)
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
 
@@ -161,7 +157,19 @@ class InviteService {
     throw new Error('Erro ao carregar convites: ' + error.message);
    }
 
-   return data || [];
+   if (!data || data.length === 0) return [];
+
+   // Buscar dados dos clientes separadamente
+   const clientIds = data.map(d => d.client_id);
+   const { data: clients } = await supabase
+    .from('user_profiles')
+    .select('user_id, nome, email')
+    .in('user_id', clientIds);
+
+   return data.map(invite => ({
+    ...invite,
+    client: clients?.find(c => c.user_id === invite.client_id) || null
+   }));
 
   } catch (error: any) {
    throw new Error(error.message || 'Erro ao carregar convites');
@@ -172,10 +180,7 @@ class InviteService {
   try {
    const { data, error } = await supabase
     .from('professional_invites')
-    .select(`
-     *,
-     professional:user_profiles!professional_id(id, nome, email)
-    `)
+    .select('*')
     .eq('client_id', clientId)
     .order('created_at', { ascending: false });
 
@@ -183,7 +188,19 @@ class InviteService {
     throw new Error('Erro ao carregar convites enviados: ' + error.message);
    }
 
-   return data || [];
+   if (!data || data.length === 0) return [];
+
+   // Buscar dados dos profissionais separadamente
+   const trainerIds = data.map(d => d.trainer_id);
+   const { data: trainers } = await supabase
+    .from('user_profiles')
+    .select('user_id, nome, email')
+    .in('user_id', trainerIds);
+
+   return data.map(invite => ({
+    ...invite,
+    professional: trainers?.find(t => t.user_id === invite.trainer_id) || null
+   }));
 
   } catch (error: any) {
    throw new Error(error.message || 'Erro ao carregar convites enviados');
@@ -267,25 +284,31 @@ class InviteService {
 
  async getMyClients(professionalId: string): Promise<any[]> {
   try {
-   const { data, error } = await supabase
+   const { data: connections, error } = await supabase
     .from('professional_clients')
-    .select(`
-     *,
-     client:user_profiles!client_id(id, nome, email, created_at)
-    `)
-    .eq('professional_id', professionalId)
-    .eq('status', 'ativo')
+    .select('*')
+    .eq('trainer_id', professionalId)
     .order('started_at', { ascending: false });
 
    if (error) {
     throw new Error('Erro ao carregar clientes: ' + error.message);
    }
 
-   return (data || []).map(item => ({
-    ...item.client,
-    relationship_started: item.started_at,
-    relationship_status: item.status,
-   }));
+   if (!connections || connections.length === 0) return [];
+
+   const clientIds = connections.map(c => c.client_id);
+   const { data: clients } = await supabase
+    .from('user_profiles')
+    .select('user_id, nome, email, created_at')
+    .in('user_id', clientIds);
+
+   return connections.map(conn => {
+    const client = clients?.find(c => c.user_id === conn.client_id);
+    return {
+     ...client,
+     relationship_started: conn.started_at,
+    };
+   });
 
   } catch (error: any) {
    throw new Error(error.message || 'Erro ao carregar clientes');
@@ -294,32 +317,30 @@ class InviteService {
 
  async getMyProfessional(clientId: string): Promise<any | null> {
   try {
-   const { data, error } = await supabase
+   const { data: connection, error } = await supabase
     .from('professional_clients')
-    .select(`
-     *,
-     professional:user_profiles!professional_id(id, nome, email, created_at)
-    `)
+    .select('*')
     .eq('client_id', clientId)
-    .eq('status', 'ativo')
     .single();
 
    if (error) {
-    // No professional found is not an error
     if (error.code === 'PGRST116') {
      return null;
     }
     throw new Error('Erro ao carregar personal trainer: ' + error.message);
    }
 
-   if (!data) {
-    return null;
-   }
+   if (!connection) return null;
+
+   const { data: professional } = await supabase
+    .from('user_profiles')
+    .select('user_id, nome, email, created_at')
+    .eq('user_id', connection.trainer_id)
+    .single();
 
    return {
-    ...data.professional,
-    relationship_started: data.started_at,
-    relationship_status: data.status,
+    ...professional,
+    relationship_started: connection.started_at,
    };
 
   } catch (error: any) {
@@ -348,10 +369,9 @@ class InviteService {
    const { error: relationError } = await supabase
     .from('professional_clients')
     .insert({
-     professional_id: professional.user_id, // Use user_id for foreign key
+     trainer_id: professional.user_id,
      client_id: user.id,
      started_at: new Date().toISOString(),
-     status: 'ativo',
     });
 
    if (relationError) {
